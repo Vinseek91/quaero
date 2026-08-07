@@ -27,7 +27,7 @@ const SOURCE_COLORS: Record<string, string> = {
   exa: "bg-purple-500",
   duckduckgo: "bg-red-500",
   arxiv: "bg-green-600",
-  github: "bg-gray-700",
+  github: "bg-gray-600",
   stackoverflow: "bg-amber-500",
   hackernews: "bg-orange-600",
   reddit: "bg-red-600",
@@ -44,14 +44,14 @@ const MODES: { id: SearchMode; label: string; icon: string }[] = [
 ];
 
 export default function Home() {
-  const [query, setQuery]           = useState("");
-  const [mode, setMode]             = useState<SearchMode>("general");
-  const [results, setResults]       = useState<SearchResult[]>([]);
-  const [answer, setAnswer]         = useState("");
-  const [prediction, setPrediction] = useState<Prediction | null>(null);
-  const [loading, setLoading]       = useState(false);
+  const [query, setQuery]               = useState("");
+  const [mode, setMode]                 = useState<SearchMode>("general");
+  const [results, setResults]           = useState<SearchResult[]>([]);
+  const [answer, setAnswer]             = useState("");
+  const [prediction, setPrediction]     = useState<Prediction | null>(null);
+  const [loading, setLoading]           = useState(false);
   const [deepResearch, setDeepResearch] = useState(false);
-  const [round, setRound]           = useState(0);
+  const [round, setRound]               = useState(0);
   const answerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,9 +70,10 @@ export default function Home() {
     setPrediction(null);
     setRound(0);
 
+    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     const endpoint = deepResearch
-      ? `http://localhost:8000/api/deep-research?q=${encodeURIComponent(query)}&rounds=3`
-      : `http://localhost:8000/api/search?q=${encodeURIComponent(query)}&mode=${mode}&stream=true&predict=${mode === "prediction"}`;
+      ? `${API}/api/deep-research?q=${encodeURIComponent(query)}&rounds=3`
+      : `${API}/api/search?q=${encodeURIComponent(query)}&mode=${mode}&stream=true&predict=${mode === "prediction"}`;
 
     try {
       const resp = await fetch(endpoint);
@@ -102,10 +103,10 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0f0d] text-white font-mono">
+    <div className="min-h-screen bg-white text-gray-800 font-mono">
 
       {/* ── HEADER ── */}
-      <header className="border-b border-white/10 px-6 py-4 flex items-center gap-4">
+      <header className="border-b border-gray-200 px-6 py-4 flex items-center gap-4 bg-white shadow-sm">
         <div className="flex items-center gap-3">
           <svg width="36" height="36" viewBox="0 0 36 36">
             <defs>
@@ -116,15 +117,15 @@ export default function Home() {
               </linearGradient>
             </defs>
             <circle cx="18" cy="18" r="16" fill="none" stroke="url(#qg)" strokeWidth="2"/>
-            <text x="18" y="23" textAnchor="middle" fontSize="14" fontWeight="700" fill="white">Q</text>
+            <text x="18" y="23" textAnchor="middle" fontSize="14" fontWeight="700" fill="#1f2937">Q</text>
           </svg>
-          <span className="text-xl font-bold tracking-widest">QUAERO</span>
+          <span className="text-xl font-bold tracking-widest text-gray-900">QUAERO</span>
         </div>
-        <span className="text-xs text-white/30 tracking-widest hidden sm:block">THE ORIGIN OF SEARCH</span>
+        <span className="text-xs text-gray-400 tracking-widest hidden sm:block">THE ORIGIN OF SEARCH</span>
         <a
-          href="https://github.com/quaero-search/quaero"
+          href="https://github.com/Vinseek91/quaero"
           target="_blank"
-          className="ml-auto text-xs text-white/40 hover:text-white/70 transition-colors border border-white/10 px-3 py-1 rounded"
+          className="ml-auto text-xs text-gray-500 hover:text-gray-800 transition-colors border border-gray-200 px-3 py-1 rounded hover:border-gray-400"
         >
           ★ GitHub
         </a>
@@ -135,13 +136,13 @@ export default function Home() {
         {/* ── HERO ── */}
         {!answer && results.length === 0 && (
           <div className="text-center mb-14">
-            <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-teal-400 to-amber-400 bg-clip-text text-transparent tracking-widest">
+            <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-blue-500 via-teal-500 to-amber-500 bg-clip-text text-transparent tracking-widest">
               QUAERO
             </h1>
-            <p className="text-white/40 text-xs tracking-[0.3em] mb-8">
+            <p className="text-gray-400 text-xs tracking-[0.3em] mb-8">
               LATIN: I SEEK · THE ORIGIN OF THE WORD QUERY
             </p>
-            <div className="flex justify-center gap-6 text-xs text-white/30">
+            <div className="flex justify-center gap-6 text-xs text-gray-400">
               <span>12 SOURCES</span>
               <span>·</span>
               <span>SWARM INTELLIGENCE</span>
@@ -160,13 +161,13 @@ export default function Home() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search anything — web, academic, code, news..."
-              className="flex-1 bg-white/5 border border-white/15 rounded-xl px-5 py-3.5 text-sm outline-none focus:border-teal-500/60 transition-colors placeholder:text-white/25"
+              className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-5 py-3.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition-all placeholder:text-gray-400 text-gray-800"
               autoFocus
             />
             <button
               type="submit"
               disabled={loading}
-              className="bg-gradient-to-r from-blue-500 via-teal-500 to-amber-500 text-black font-bold px-7 rounded-xl text-sm disabled:opacity-50 transition-opacity hover:opacity-90"
+              className="bg-gradient-to-r from-blue-500 via-teal-500 to-amber-500 text-white font-bold px-7 rounded-xl text-sm disabled:opacity-50 transition-opacity hover:opacity-90 shadow-sm"
             >
               {loading ? "···" : "SEARCH"}
             </button>
@@ -180,8 +181,8 @@ export default function Home() {
                 onClick={() => setMode(m.id)}
                 className={`px-3 py-1 rounded-lg text-xs border transition-colors ${
                   mode === m.id
-                    ? "border-teal-500 bg-teal-500/20 text-teal-300"
-                    : "border-white/10 text-white/35 hover:border-white/25"
+                    ? "border-teal-400 bg-teal-50 text-teal-700"
+                    : "border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-700"
                 }`}
               >
                 {m.icon} {m.label}
@@ -192,8 +193,8 @@ export default function Home() {
               onClick={() => setDeepResearch((d) => !d)}
               className={`px-3 py-1 rounded-lg text-xs border transition-colors ml-auto ${
                 deepResearch
-                  ? "border-purple-500 bg-purple-500/20 text-purple-300"
-                  : "border-white/10 text-white/35 hover:border-white/25"
+                  ? "border-purple-400 bg-purple-50 text-purple-700"
+                  : "border-gray-200 text-gray-500 hover:border-gray-400"
               }`}
             >
               ◈ Deep Research
@@ -203,7 +204,7 @@ export default function Home() {
 
         {/* ── RESEARCH ROUND ── */}
         {deepResearch && round > 0 && (
-          <div className="mb-4 text-xs text-purple-400 tracking-wider">
+          <div className="mb-4 text-xs text-purple-600 tracking-wider">
             ◈ Research round {round} / 3 in progress...
           </div>
         )}
@@ -217,20 +218,20 @@ export default function Home() {
                 href={r.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="border border-white/8 rounded-lg p-3 hover:border-white/20 transition-colors block group"
+                className="border border-gray-200 rounded-lg p-3 hover:border-gray-400 hover:shadow-sm transition-all block group bg-white"
               >
                 <div className="flex items-start gap-2 mb-1.5">
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${SOURCE_COLORS[r.source] || "bg-gray-600"} text-white shrink-0 mt-0.5 uppercase`}>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${SOURCE_COLORS[r.source] || "bg-gray-500"} text-white shrink-0 mt-0.5 uppercase`}>
                     {r.source}
                   </span>
                   {r.appearances > 1 && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-teal-900/60 text-teal-300 shrink-0 mt-0.5">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 shrink-0 mt-0.5">
                       ×{r.appearances} sources
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-white/80 line-clamp-2 group-hover:text-white transition-colors">{r.title}</p>
-                <p className="text-[11px] text-white/35 mt-1 line-clamp-2">{r.snippet}</p>
+                <p className="text-xs text-gray-800 line-clamp-2 group-hover:text-gray-900 transition-colors font-medium">{r.title}</p>
+                <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">{r.snippet}</p>
               </a>
             ))}
           </div>
@@ -238,39 +239,39 @@ export default function Home() {
 
         {/* ── ANSWER ── */}
         {(answer || loading) && (
-          <div className="border border-white/10 rounded-xl p-6 mb-6">
-            <div className="text-[10px] text-teal-400 mb-4 tracking-widest flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"/>
+          <div className="border border-gray-200 rounded-xl p-6 mb-6 bg-gray-50">
+            <div className="text-[10px] text-teal-600 mb-4 tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"/>
               QUAERO SYNTHESIS · {results.length} SOURCES
             </div>
             <div
               ref={answerRef}
-              className="text-sm text-white/85 leading-relaxed whitespace-pre-wrap max-h-[65vh] overflow-y-auto"
+              className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-[65vh] overflow-y-auto"
             >
               {answer}
-              {loading && <span className="animate-pulse text-teal-400">▋</span>}
+              {loading && <span className="animate-pulse text-teal-500">▋</span>}
             </div>
           </div>
         )}
 
         {/* ── MIROFISH PREDICTION ── */}
         {prediction?.enabled && prediction.prediction && (
-          <div className="border border-purple-500/25 rounded-xl p-5 bg-purple-950/15">
+          <div className="border border-purple-200 rounded-xl p-5 bg-purple-50">
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-[10px] text-purple-400 tracking-widest">◎ MIROFISH SWARM PREDICTION</span>
+              <span className="text-[10px] text-purple-600 tracking-widest">◎ MIROFISH SWARM PREDICTION</span>
               {prediction.confidence && (
-                <span className="text-[10px] bg-purple-900/60 text-purple-300 px-2 py-0.5 rounded">
+                <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
                   {prediction.confidence}% agent consensus
                 </span>
               )}
             </div>
-            <p className="text-sm text-white/80 leading-relaxed mb-3">{prediction.prediction}</p>
+            <p className="text-sm text-gray-700 leading-relaxed mb-3">{prediction.prediction}</p>
             {prediction.top_viewpoints && prediction.top_viewpoints.length > 0 && (
-              <div className="space-y-1 border-t border-white/5 pt-3">
-                <div className="text-[10px] text-white/30 mb-2">TOP VIEWPOINTS FROM 500 AGENTS</div>
+              <div className="space-y-1 border-t border-purple-100 pt-3">
+                <div className="text-[10px] text-gray-400 mb-2">TOP VIEWPOINTS FROM 500 AGENTS</div>
                 {prediction.top_viewpoints.map((v, i) => (
-                  <div key={i} className="text-xs text-white/50 flex gap-2">
-                    <span className="text-purple-400">◎</span>{v}
+                  <div key={i} className="text-xs text-gray-600 flex gap-2">
+                    <span className="text-purple-500">◎</span>{v}
                   </div>
                 ))}
               </div>
@@ -281,8 +282,8 @@ export default function Home() {
       </main>
 
       {/* ── FOOTER ── */}
-      <footer className="fixed bottom-0 left-0 right-0 border-t border-white/5 bg-[#0a0f0d]/90 backdrop-blur px-6 py-2 flex justify-between text-[10px] text-white/20">
-        <span>QUAERO · Open Source · Apache 2.0 · github.com/quaero-search/quaero</span>
+      <footer className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white px-6 py-2 flex justify-between text-[10px] text-gray-400">
+        <span>QUAERO · Open Source · Apache 2.0 · github.com/Vinseek91/quaero</span>
         <span>12 sources · OmniRoute · MiroFish swarm intelligence</span>
       </footer>
     </div>

@@ -28,8 +28,11 @@ async def search(
     """
     QUAERO unified search — 10+ sources, AI synthesis, optional swarm prediction.
     """
-    # 1. Classify intent
-    intent = await reasoner.classify_intent(q)
+    # 1. Classify intent (graceful fallback)
+    try:
+        intent = await reasoner.classify_intent(q)
+    except Exception:
+        intent = {}
     effective_mode = intent.get("mode", mode)
     needs_prediction = predict or intent.get("needs_prediction", False)
 
@@ -44,33 +47,52 @@ async def search(
             # Send search results first
             yield f"data: {json.dumps({'type': 'results', 'data': results[:10]})}\n\n"
 
-            # Stream reasoning
-            full_answer = ""
-            async for chunk in reasoner.synthesise(q, results, stream=True, mode=effective_mode):
-                full_answer += chunk
-                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
+            # Stream reasoning (graceful fallback if LLM unavailable)
+            try:
+                async for chunk in reasoner.synthesise(q, results, stream=True, mode=effective_mode):
+                    yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
+            except Exception as e:
+                logger.warning(f"Reasoning failed: {e}")
+                # Fallback: return top snippets as the answer
+                fallback = "\n\n".join([
+                    f"**{r['title']}**\n{r['snippet']}\n{r['url']}"
+                    for r in results[:5] if r.get('snippet')
+                ])
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': fallback or 'Results found above. Add an OpenAI/Anthropic API key or start OmniRoute for AI synthesis.'})}\n\n"
 
             # MiroFish prediction (if enabled)
             if needs_prediction or intent.get("is_controversial"):
-                context = "\n".join([f"{r['title']}: {r['snippet']}" for r in results[:8]])
-                prediction = await mirofish.predict(q, context)
-                yield f"data: {json.dumps({'type': 'prediction', 'data': prediction})}\n\n"
+                try:
+                    context = "\n".join([f"{r['title']}: {r['snippet']}" for r in results[:8]])
+                    prediction = await mirofish.predict(q, context)
+                    yield f"data: {json.dumps({'type': 'prediction', 'data': prediction})}\n\n"
+                except Exception as e:
+                    logger.warning(f"MiroFish failed: {e}")
 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     # Non-streaming
-    answer_parts = []
-    async for chunk in reasoner.synthesise(q, results, stream=False, mode=effective_mode):
-        answer_parts.append(chunk)
+    try:
+        answer_parts = []
+        async for chunk in reasoner.synthesise(q, results, stream=False, mode=effective_mode):
+            answer_parts.append(chunk)
+        answer = "".join(answer_parts)
+    except Exception as e:
+        logger.warning(f"Reasoning unavailable: {e}")
+        answer = "\n\n".join([
+            f"**{r['title']}**\n{r['snippet']}\n{r['url']}"
+            for r in results[:5] if r.get("snippet")
+        ]) or "Results found. Start OmniRoute or add an API key for AI synthesis."
 
-    answer = "".join(answer_parts)
     prediction = {}
-
     if needs_prediction:
-        context = "\n".join([f"{r['title']}: {r['snippet']}" for r in results[:8]])
-        prediction = await mirofish.predict(q, context)
+        try:
+            context = "\n".join([f"{r['title']}: {r['snippet']}" for r in results[:8]])
+            prediction = await mirofish.predict(q, context)
+        except Exception:
+            pass
 
     return {
         "query": q,

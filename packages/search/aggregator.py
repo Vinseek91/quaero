@@ -90,20 +90,16 @@ class UniversalSearchAggregator:
     async def _ddg_search(self, query: str) -> list[SearchResult]:
         """DuckDuckGo — free, no API key needed."""
         try:
-            resp = await self.client.get(
-                "https://api.duckduckgo.com/",
-                params={"q": query, "format": "json", "no_redirect": 1, "no_html": 1},
-            )
-            data = resp.json()
+            from ddgs import DDGS
             results = []
-            for r in data.get("RelatedTopics", [])[:10]:
-                if "FirstURL" in r and "Text" in r:
+            with DDGS() as ddgs:
+                for r in ddgs.text(query, max_results=10):
                     results.append(SearchResult(
-                        title=r["Text"][:80],
-                        url=r["FirstURL"],
-                        snippet=r["Text"],
+                        title=r.get("title", ""),
+                        url=r.get("href", ""),
+                        snippet=r.get("body", ""),
                         source="duckduckgo",
-                        score=0.7,
+                        score=0.9,
                     ))
             return results
         except Exception as e:
