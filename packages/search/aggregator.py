@@ -92,15 +92,15 @@ class UniversalSearchAggregator:
         try:
             from duckduckgo_search import DDGS
             results = []
-            with DDGS() as ddgs:
-                for r in ddgs.text(query, max_results=10):
-                    results.append(SearchResult(
-                        title=r.get("title", ""),
-                        url=r.get("href", ""),
-                        snippet=r.get("body", ""),
-                        source="duckduckgo",
-                        score=0.9,
-                    ))
+            ddgs = DDGS()
+            for r in ddgs.text(query, max_results=10):
+                results.append(SearchResult(
+                    title=r.get("title", ""),
+                    url=r.get("href", ""),
+                    snippet=r.get("body", ""),
+                    source="duckduckgo",
+                    score=0.9,
+                ))
             return results
         except Exception as e:
             logger.warning(f"DDG error: {e}")
