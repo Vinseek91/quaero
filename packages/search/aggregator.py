@@ -90,7 +90,7 @@ class UniversalSearchAggregator:
     async def _ddg_search(self, query: str) -> list[SearchResult]:
         """DuckDuckGo — free, no API key needed."""
         try:
-            from ddgs import DDGS
+            from duckduckgo_search import DDGS
             results = []
             with DDGS() as ddgs:
                 for r in ddgs.text(query, max_results=10):
