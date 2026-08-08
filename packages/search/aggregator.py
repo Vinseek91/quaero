@@ -57,7 +57,8 @@ class UniversalSearchAggregator:
         return [r.to_dict() for r in ranked[:top_k]]
 
     def _select_providers(self, mode: str) -> list:
-        base = [self._ddg_search, self._jina_search]
+        # Always-on free providers (no API key, work from cloud IPs)
+        base = [self._wikipedia_search, self._hn_search, self._reddit_search, self._arxiv_search]
 
         if self.settings.BRAVE_API_KEY:
             base.append(self._brave_search)
@@ -67,11 +68,9 @@ class UniversalSearchAggregator:
             base.append(self._exa_search)
 
         if mode == "academic":
-            base += [self._arxiv_search, self._semantic_scholar_search]
+            base += [self._semantic_scholar_search]
         elif mode == "code":
             base += [self._github_search, self._stackoverflow_search]
-        elif mode == "news":
-            base += [self._hn_search, self._reddit_search]
 
         return base
 
@@ -86,6 +85,25 @@ class UniversalSearchAggregator:
         return hashlib.md5(url.lower().strip("/").encode()).hexdigest()
 
     # ── PROVIDERS ─────────────────────────────────────────────────────────
+
+    async def _wikipedia_search(self, query: str) -> list[SearchResult]:
+        """Wikipedia — free, no API key, works from any IP."""
+        resp = await self.client.get(
+            "https://en.wikipedia.org/w/api.php",
+            params={"action": "query", "list": "search", "srsearch": query,
+                    "srlimit": 8, "format": "json", "utf8": 1},
+        )
+        data = resp.json()
+        return [
+            SearchResult(
+                title=r.get("title", ""),
+                url=f"https://en.wikipedia.org/wiki/{r.get('title','').replace(' ','_')}",
+                snippet=r.get("snippet", "").replace('<span class="searchmatch">', "").replace("</span>", ""),
+                source="wikipedia",
+                score=1.1,
+            )
+            for r in data.get("query", {}).get("search", [])
+        ]
 
     async def _ddg_search(self, query: str) -> list[SearchResult]:
         """DuckDuckGo — free, no API key needed."""

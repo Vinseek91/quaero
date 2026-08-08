@@ -33,6 +33,7 @@ const SOURCE_COLORS: Record<string, string> = {
   reddit: "bg-red-600",
   jina: "bg-teal-500",
   semantic_scholar: "bg-indigo-600",
+  wikipedia: "bg-gray-700",
 };
 
 const MODES: { id: SearchMode; label: string; icon: string }[] = [
