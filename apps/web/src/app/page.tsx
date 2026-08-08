@@ -97,7 +97,7 @@ export default function Home() {
         }
       }
     } catch {
-      setAnswer("Search failed — is the QUAERO API running?\n\ncd apps/api && uvicorn main:app --reload");
+      setAnswer("Search failed — is the QUAERYX API running?\n\ncd apps/api && uvicorn main:app --reload");
     } finally {
       setLoading(false);
     }
@@ -120,11 +120,11 @@ export default function Home() {
             <circle cx="18" cy="18" r="16" fill="none" stroke="url(#qg)" strokeWidth="2"/>
             <text x="18" y="23" textAnchor="middle" fontSize="14" fontWeight="700" fill="#1f2937">Q</text>
           </svg>
-          <span className="text-xl font-bold tracking-widest text-gray-900">QUAERO</span>
+          <span className="text-xl font-bold tracking-widest text-gray-900">QUAERYX</span>
         </div>
         <span className="text-xs text-gray-400 tracking-widest hidden sm:block">THE ORIGIN OF SEARCH</span>
         <a
-          href="https://github.com/Vinseek91/quaero"
+          href="https://github.com/Vinseek91/quaeryx"
           target="_blank"
           className="ml-auto text-xs text-gray-500 hover:text-gray-800 transition-colors border border-gray-200 px-3 py-1 rounded hover:border-gray-400"
         >
@@ -138,10 +138,10 @@ export default function Home() {
         {!answer && results.length === 0 && (
           <div className="text-center mb-14">
             <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-blue-500 via-teal-500 to-amber-500 bg-clip-text text-transparent tracking-widest">
-              QUAERO
+              QUAERYX
             </h1>
             <p className="text-gray-400 text-xs tracking-[0.3em] mb-8">
-              LATIN: I SEEK · THE ORIGIN OF THE WORD QUERY
+              LATIN: I SEEK · THE NEXT GENERATION OF SEARCH
             </p>
             <div className="flex justify-center gap-6 text-xs text-gray-400">
               <span>12 SOURCES</span>
@@ -243,7 +243,7 @@ export default function Home() {
           <div className="border border-gray-200 rounded-xl p-6 mb-6 bg-gray-50">
             <div className="text-[10px] text-teal-600 mb-4 tracking-widest flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"/>
-              QUAERO SYNTHESIS · {results.length} SOURCES
+              QUAERYX SYNTHESIS · {results.length} SOURCES
             </div>
             <div
               ref={answerRef}
@@ -284,7 +284,7 @@ export default function Home() {
 
       {/* ── FOOTER ── */}
       <footer className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white px-6 py-2 flex justify-between text-[10px] text-gray-400">
-        <span>QUAERO · Open Source · Apache 2.0 · github.com/Vinseek91/quaero</span>
+        <span>QUAERYX · Open Source · Apache 2.0 · github.com/Vinseek91/quaeryx</span>
         <span>12 sources · OmniRoute · MiroFish swarm intelligence</span>
       </footer>
     </div>

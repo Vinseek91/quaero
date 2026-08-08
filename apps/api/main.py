@@ -8,12 +8,12 @@ from core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("QUAERO starting up...")
+    logger.info("QUAERYX starting up...")
     yield
-    logger.info("QUAERO shutting down...")
+    logger.info("QUAERYX shutting down...")
 
 app = FastAPI(
-    title="QUAERO",
+    title="QUAERYX",
     description="The search engine born from the word 'search' — more powerful than Google + Perplexity combined",
     version="0.1.0",
     lifespan=lifespan,
