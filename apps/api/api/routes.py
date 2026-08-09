@@ -366,6 +366,63 @@ async def list_models():
     }
 
 
+@router.get("/trending")
+async def trending():
+    """Return live trending topics from HackerNews and Reddit."""
+    import httpx
+    topics = []
+
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            # HackerNews top stories
+            hn_resp = await client.get("https://hacker-news.firebaseio.com/v0/topstories.json")
+            top_ids = hn_resp.json()[:8]
+            for sid in top_ids:
+                try:
+                    item = (await client.get(f"https://hacker-news.firebaseio.com/v0/item/{sid}.json")).json()
+                    if item.get("title") and item.get("score", 0) > 50:
+                        topics.append({
+                            "title": item["title"],
+                            "source": "hackernews",
+                            "score": item.get("score", 0),
+                            "url": item.get("url", f"https://news.ycombinator.com/item?id={sid}"),
+                        })
+                except Exception:
+                    pass
+
+            # Reddit r/technology + r/science hot posts
+            for sub in ["technology", "worldnews"]:
+                try:
+                    r = await client.get(
+                        f"https://www.reddit.com/r/{sub}/hot.json?limit=4",
+                        headers={"User-Agent": "QUAERYX/1.0"}
+                    )
+                    for post in r.json()["data"]["children"][:3]:
+                        d = post["data"]
+                        if not d.get("stickied") and d.get("title"):
+                            topics.append({
+                                "title": d["title"],
+                                "source": "reddit",
+                                "score": d.get("score", 0),
+                                "url": f"https://reddit.com{d.get('permalink', '')}",
+                            })
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning(f"Trending fetch failed: {e}")
+
+    # Sort by score and deduplicate
+    seen = set()
+    unique = []
+    for t in sorted(topics, key=lambda x: x["score"], reverse=True):
+        key = t["title"][:40]
+        if key not in seen:
+            seen.add(key)
+            unique.append(t)
+
+    return {"trending": unique[:12]}
+
+
 @router.get("/providers")
 async def list_providers():
     return {

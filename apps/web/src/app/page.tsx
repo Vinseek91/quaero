@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+const HISTORY_KEY = "quaeryx_history";
+
 type SearchMode = "general" | "academic" | "code" | "news" | "prediction";
 type ConnectorType = null | "url" | "youtube" | "gdrive";
 
@@ -147,6 +149,16 @@ export default function Home() {
   // Follow-up questions
   const [followUps, setFollowUps]       = useState<string[]>([]);
 
+  // Search history
+  const [history, setHistory]           = useState<string[]>([]);
+  const [showHistory, setShowHistory]   = useState(false);
+
+  // Trending
+  const [trending, setTrending]         = useState<{ title: string; source: string }[]>([]);
+
+  // Export
+  const [exported, setExported]         = useState(false);
+
   // Share
   const [copied, setCopied]             = useState(false);
 
@@ -158,12 +170,38 @@ export default function Home() {
 
   useEffect(() => { setVisible(true); }, []);
 
+  // Load search history from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(HISTORY_KEY);
+      if (saved) setHistory(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  // Fetch trending on mount
+  useEffect(() => {
+    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    fetch(`${API}/api/trending`)
+      .then((r) => r.json())
+      .then((d) => setTrending(d.trending || []))
+      .catch(() => {});
+  }, []);
+
   // Extract follow-up questions once answer is complete
   useEffect(() => {
     if (!loading && answer) {
       setFollowUps(extractFollowUps(answer));
     }
   }, [loading, answer]);
+
+  // Close history on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("[data-search-box]")) setShowHistory(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     if (answerRef.current) answerRef.current.scrollTop = answerRef.current.scrollHeight;
@@ -290,8 +328,36 @@ export default function Home() {
       setAnswer("Search failed — is the QUAERYX API running?");
     } finally {
       setLoading(false);
+      // Save to history
+      if (q.trim() && !isHttpUrl(q)) {
+        setHistory((prev) => {
+          const next = [q, ...prev.filter((h) => h !== q)].slice(0, 20);
+          try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch {}
+          return next;
+        });
+      }
     }
   }, [mode, deepResearch, selectedModel, uploadedFile, connector, connectorInput, gdriveToken]);
+
+  const handleExport = () => {
+    if (!answer) return;
+    const sources = results.map((r, i) => `[${i + 1}] ${r.title} — ${r.url}`).join("\n");
+    const md = `# ${query}\n\n${answer}\n\n---\n\n## Sources\n${sources}`;
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `quaeryx-${query.slice(0, 40).replace(/\s+/g, "-").toLowerCase()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExported(true);
+    setTimeout(() => setExported(false), 2000);
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -390,12 +456,21 @@ export default function Home() {
         <span className="text-[11px] text-gray-400 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
         <div className="ml-auto flex items-center gap-3">
           {hasResults && (
-            <button
-              onClick={handleShare}
-              className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
-            >
-              {copied ? <><span>✓</span> Copied!</> : <><span>↗</span> Share</>}
-            </button>
+            <>
+              <button
+                onClick={handleExport}
+                className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
+                title="Download answer as Markdown"
+              >
+                {exported ? <><span>✓</span> Saved!</> : <><span>↓</span> Export</>}
+              </button>
+              <button
+                onClick={handleShare}
+                className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
+              >
+                {copied ? <><span>✓</span> Copied!</> : <><span>↗</span> Share</>}
+              </button>
+            </>
           )}
           <a href="https://github.com/Vinseek91/quaeryx" target="_blank"
             className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5">
@@ -439,6 +514,31 @@ export default function Home() {
               <span className="text-gray-200">·</span>
               <span>OPEN SOURCE</span>
             </div>
+
+            {/* Trending topics */}
+            {trending.length > 0 && (
+              <div className="mt-10">
+                <div className="text-[10px] text-gray-400 tracking-widest font-semibold uppercase mb-3 flex items-center justify-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"/>
+                  Trending now
+                </div>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {trending.slice(0, 8).map((t, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => { setQuery(t.title); runSearch(t.title, mode); }}
+                      className="text-xs text-gray-600 bg-white border border-gray-200 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 rounded-xl px-3 py-1.5 transition-all shadow-sm hover:shadow-md flex items-center gap-1.5 max-w-[280px]"
+                    >
+                      <span className={t.source === "hackernews" ? "text-orange-400" : "text-blue-400"}>
+                        {t.source === "hackernews" ? "Y" : "r/"}
+                      </span>
+                      <span className="truncate">{t.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -486,10 +586,11 @@ export default function Home() {
 
           {/* Search input */}
           <div className="flex gap-2.5 mb-4">
-            <div className="flex-1 relative flex items-center">
+            <div className="flex-1 relative flex items-center" data-search-box>
               <input
                 value={query}
                 onChange={(e) => handleQueryChange(e.target.value)}
+                onFocus={() => setShowHistory(true)}
                 placeholder={
                   uploadedFile     ? "Ask a question about the file..." :
                   connector === "youtube" ? "Ask about this video..." :
@@ -513,7 +614,7 @@ export default function Home() {
                   </svg>
                 </button>
                 <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.csv" className="hidden" onChange={handleFileChange} />
-                {/* Voice */}
+                {/* Voice  */}
                 <button
                   type="button"
                   onClick={startVoice}
@@ -528,6 +629,27 @@ export default function Home() {
                   </svg>
                 </button>
               </div>
+
+              {/* History dropdown */}
+              {showHistory && history.length > 0 && !query && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 overflow-hidden">
+                  <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">Recent searches</span>
+                    <button type="button" onClick={clearHistory} className="text-[10px] text-gray-400 hover:text-red-500 transition-colors">Clear</button>
+                  </div>
+                  {history.slice(0, 8).map((h, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => { setQuery(h); setShowHistory(false); runSearch(h, mode); }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                    >
+                      <span className="text-gray-300 text-xs">↩</span>
+                      {h}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <button
               type="submit"
