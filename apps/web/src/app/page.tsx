@@ -21,19 +21,32 @@ interface Prediction {
   prediction?: string;
 }
 
+const SOURCE_ICONS: Record<string, string> = {
+  wikipedia:        "https://www.google.com/s2/favicons?domain=wikipedia.org&sz=32",
+  brave:            "https://www.google.com/s2/favicons?domain=search.brave.com&sz=32",
+  tavily:           "https://www.google.com/s2/favicons?domain=tavily.com&sz=32",
+  exa:              "https://www.google.com/s2/favicons?domain=exa.ai&sz=32",
+  duckduckgo:       "https://www.google.com/s2/favicons?domain=duckduckgo.com&sz=32",
+  arxiv:            "https://www.google.com/s2/favicons?domain=arxiv.org&sz=32",
+  github:           "https://www.google.com/s2/favicons?domain=github.com&sz=32",
+  stackoverflow:    "https://www.google.com/s2/favicons?domain=stackoverflow.com&sz=32",
+  hackernews:       "https://www.google.com/s2/favicons?domain=news.ycombinator.com&sz=32",
+  reddit:           "https://www.google.com/s2/favicons?domain=reddit.com&sz=32",
+  semantic_scholar: "https://www.google.com/s2/favicons?domain=semanticscholar.org&sz=32",
+};
+
 const SOURCE_COLORS: Record<string, string> = {
-  brave: "bg-orange-500",
-  tavily: "bg-blue-500",
-  exa: "bg-purple-500",
-  duckduckgo: "bg-red-500",
-  arxiv: "bg-green-600",
-  github: "bg-gray-600",
-  stackoverflow: "bg-amber-500",
-  hackernews: "bg-orange-600",
-  reddit: "bg-red-600",
-  jina: "bg-teal-500",
-  semantic_scholar: "bg-indigo-600",
-  wikipedia: "bg-gray-700",
+  wikipedia:        "bg-gray-100 text-gray-600",
+  brave:            "bg-orange-50 text-orange-600",
+  tavily:           "bg-blue-50 text-blue-600",
+  exa:              "bg-purple-50 text-purple-600",
+  duckduckgo:       "bg-red-50 text-red-600",
+  arxiv:            "bg-green-50 text-green-700",
+  github:           "bg-gray-100 text-gray-700",
+  stackoverflow:    "bg-amber-50 text-amber-600",
+  hackernews:       "bg-orange-50 text-orange-700",
+  reddit:           "bg-red-50 text-red-600",
+  semantic_scholar: "bg-indigo-50 text-indigo-600",
 };
 
 const MODES: { id: SearchMode; label: string; icon: string }[] = [
@@ -44,6 +57,29 @@ const MODES: { id: SearchMode; label: string; icon: string }[] = [
   { id: "prediction", label: "Predict",  icon: "◎" },
 ];
 
+function getFavicon(url: string, source: string): string {
+  if (SOURCE_ICONS[source]) return SOURCE_ICONS[source];
+  try {
+    const domain = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+  } catch {
+    return "";
+  }
+}
+
+function SkeletonCard() {
+  return (
+    <div className="border border-gray-100 rounded-2xl p-4 bg-white shadow-sm animate-pulse">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-5 h-5 rounded-full bg-gray-200" />
+        <div className="h-3 w-16 rounded bg-gray-200" />
+      </div>
+      <div className="h-4 w-full rounded bg-gray-200 mb-2" />
+      <div className="h-3 w-3/4 rounded bg-gray-200" />
+    </div>
+  );
+}
+
 export default function Home() {
   const [query, setQuery]               = useState("");
   const [mode, setMode]                 = useState<SearchMode>("general");
@@ -53,7 +89,10 @@ export default function Home() {
   const [loading, setLoading]           = useState(false);
   const [deepResearch, setDeepResearch] = useState(false);
   const [round, setRound]               = useState(0);
+  const [visible, setVisible]           = useState(false);
   const answerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setVisible(true); }, []);
 
   useEffect(() => {
     if (answerRef.current) {
@@ -104,12 +143,13 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-gray-800 font-mono">
+    <div className={`min-h-screen bg-[#f8f9fc] text-gray-800 transition-opacity duration-700 ${visible ? "opacity-100" : "opacity-0"}`}
+      style={{ fontFamily: "'Inter', 'system-ui', sans-serif" }}>
 
       {/* ── HEADER ── */}
-      <header className="border-b border-gray-200 px-6 py-4 flex items-center gap-4 bg-white shadow-sm">
-        <div className="flex items-center gap-3">
-          <svg width="36" height="36" viewBox="0 0 36 36">
+      <header className="border-b border-gray-200/80 px-6 py-3.5 flex items-center gap-4 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <svg width="32" height="32" viewBox="0 0 36 36">
             <defs>
               <linearGradient id="qg" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%"   stopColor="#4285F4"/>
@@ -117,60 +157,71 @@ export default function Home() {
                 <stop offset="100%" stopColor="#FBBC05"/>
               </linearGradient>
             </defs>
+            <circle cx="18" cy="18" r="16" fill="url(#qg)" opacity="0.15"/>
             <circle cx="18" cy="18" r="16" fill="none" stroke="url(#qg)" strokeWidth="2"/>
-            <text x="18" y="23" textAnchor="middle" fontSize="14" fontWeight="700" fill="#1f2937">Q</text>
+            <text x="18" y="23" textAnchor="middle" fontSize="13" fontWeight="800" fill="#1f2937">Q</text>
           </svg>
-          <span className="text-xl font-bold tracking-widest text-gray-900">QUAERYX</span>
+          <span className="text-lg font-bold tracking-widest text-gray-900">QUAERYX</span>
         </div>
-        <span className="text-xs text-gray-400 tracking-widest hidden sm:block">THE ORIGIN OF SEARCH</span>
-        <a
-          href="https://github.com/Vinseek91/quaeryx"
-          target="_blank"
-          className="ml-auto text-xs text-gray-500 hover:text-gray-800 transition-colors border border-gray-200 px-3 py-1 rounded hover:border-gray-400"
-        >
-          ★ GitHub
-        </a>
+        <span className="text-[11px] text-gray-400 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
+        <div className="ml-auto flex items-center gap-3">
+          <a
+            href="https://github.com/Vinseek91/quaeryx"
+            target="_blank"
+            className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
+          >
+            <span>★</span> GitHub
+          </a>
+        </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-12">
+      <main className="max-w-3xl mx-auto px-4 py-10 pb-24">
 
         {/* ── HERO ── */}
-        {!answer && results.length === 0 && (
-          <div className="text-center mb-14">
-            <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-blue-500 via-teal-500 to-amber-500 bg-clip-text text-transparent tracking-widest">
+        {!answer && results.length === 0 && !loading && (
+          <div className="text-center mb-12">
+            <h1 className="text-7xl font-black mb-3 bg-gradient-to-r from-blue-500 via-teal-400 to-amber-400 bg-clip-text text-transparent tracking-widest leading-tight">
               QUAERYX
             </h1>
-            <p className="text-gray-400 text-xs tracking-[0.3em] mb-8">
+            <p className="text-gray-400 text-xs tracking-[0.35em] mb-10 font-medium">
               LATIN: I SEEK · THE NEXT GENERATION OF SEARCH
             </p>
-            <div className="flex justify-center gap-6 text-xs text-gray-400">
+            <div className="flex justify-center gap-8 text-xs text-gray-400 font-medium">
               <span>12 SOURCES</span>
-              <span>·</span>
+              <span className="text-gray-200">·</span>
               <span>SWARM INTELLIGENCE</span>
-              <span>·</span>
+              <span className="text-gray-200">·</span>
               <span>DEEP RESEARCH</span>
-              <span>·</span>
+              <span className="text-gray-200">·</span>
               <span>OPEN SOURCE</span>
             </div>
           </div>
         )}
 
         {/* ── SEARCH FORM ── */}
-        <form onSubmit={handleSearch} className="mb-6">
-          <div className="flex gap-2 mb-3">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search anything — web, academic, code, news..."
-              className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-5 py-3.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition-all placeholder:text-gray-400 text-gray-800"
-              autoFocus
-            />
+        <form onSubmit={handleSearch} className="mb-8">
+          <div className="flex gap-2.5 mb-4">
+            <div className="flex-1 relative">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search anything — web, academic, code, news..."
+                className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-4 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-50 transition-all placeholder:text-gray-400 text-gray-800 shadow-sm hover:shadow-md hover:border-gray-300"
+                autoFocus
+              />
+            </div>
             <button
               type="submit"
               disabled={loading}
-              className="bg-gradient-to-r from-blue-500 via-teal-500 to-amber-500 text-white font-bold px-7 rounded-xl text-sm disabled:opacity-50 transition-opacity hover:opacity-90 shadow-sm"
+              className="bg-gradient-to-r from-blue-500 via-teal-500 to-amber-500 text-white font-bold px-8 rounded-2xl text-sm disabled:opacity-60 transition-all hover:opacity-90 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] shadow-md"
             >
-              {loading ? "···" : "SEARCH"}
+              {loading ? (
+                <span className="flex items-center gap-1">
+                  <span className="animate-bounce" style={{animationDelay:"0ms"}}>·</span>
+                  <span className="animate-bounce" style={{animationDelay:"150ms"}}>·</span>
+                  <span className="animate-bounce" style={{animationDelay:"300ms"}}>·</span>
+                </span>
+              ) : "Search"}
             </button>
           </div>
 
@@ -180,10 +231,10 @@ export default function Home() {
                 key={m.id}
                 type="button"
                 onClick={() => setMode(m.id)}
-                className={`px-3 py-1 rounded-lg text-xs border transition-colors ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                   mode === m.id
-                    ? "border-teal-400 bg-teal-50 text-teal-700"
-                    : "border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-700"
+                    ? "border-teal-400 bg-teal-50 text-teal-700 shadow-sm"
+                    : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700 hover:bg-white hover:shadow-sm bg-transparent"
                 }`}
               >
                 {m.icon} {m.label}
@@ -192,10 +243,10 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setDeepResearch((d) => !d)}
-              className={`px-3 py-1 rounded-lg text-xs border transition-colors ml-auto ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium border transition-all ml-auto ${
                 deepResearch
-                  ? "border-purple-400 bg-purple-50 text-purple-700"
-                  : "border-gray-200 text-gray-500 hover:border-gray-400"
+                  ? "border-purple-400 bg-purple-50 text-purple-700 shadow-sm"
+                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
               }`}
             >
               ◈ Deep Research
@@ -205,74 +256,92 @@ export default function Home() {
 
         {/* ── RESEARCH ROUND ── */}
         {deepResearch && round > 0 && (
-          <div className="mb-4 text-xs text-purple-600 tracking-wider">
-            ◈ Research round {round} / 3 in progress...
+          <div className="mb-5 text-xs text-purple-600 tracking-wider font-medium flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"/>
+            Research round {round} / 3 in progress...
+          </div>
+        )}
+
+        {/* ── SKELETON LOADERS ── */}
+        {loading && results.length === 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+            {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
           </div>
         )}
 
         {/* ── SOURCE RESULTS GRID ── */}
         {results.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
             {results.slice(0, 8).map((r, i) => (
               <a
                 key={i}
                 href={r.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="border border-gray-200 rounded-lg p-3 hover:border-gray-400 hover:shadow-sm transition-all block group bg-white"
+                className="border border-gray-200 rounded-2xl p-4 hover:border-gray-300 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 block group bg-white shadow-sm"
+                style={{ animationDelay: `${i * 50}ms` }}
               >
-                <div className="flex items-start gap-2 mb-1.5">
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${SOURCE_COLORS[r.source] || "bg-gray-500"} text-white shrink-0 mt-0.5 uppercase`}>
-                    {r.source}
+                <div className="flex items-center gap-2 mb-2.5">
+                  <img
+                    src={getFavicon(r.url, r.source)}
+                    alt={r.source}
+                    width={16}
+                    height={16}
+                    className="rounded-sm opacity-80"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                  <span className={`text-[10px] px-2 py-0.5 rounded-lg font-semibold uppercase tracking-wide ${SOURCE_COLORS[r.source] || "bg-gray-100 text-gray-600"}`}>
+                    {r.source.replace("_", " ")}
                   </span>
                   {r.appearances > 1 && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 shrink-0 mt-0.5">
-                      ×{r.appearances} sources
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-lg bg-teal-50 text-teal-600 font-semibold ml-auto">
+                      ×{r.appearances}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-800 line-clamp-2 group-hover:text-gray-900 transition-colors font-medium">{r.title}</p>
-                <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">{r.snippet}</p>
+                <p className="text-sm text-gray-800 line-clamp-2 group-hover:text-gray-900 transition-colors font-semibold leading-snug mb-1.5">{r.title}</p>
+                <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">{r.snippet}</p>
               </a>
             ))}
           </div>
         )}
 
         {/* ── ANSWER ── */}
-        {(answer || loading) && (
-          <div className="border border-gray-200 rounded-xl p-6 mb-6 bg-gray-50">
-            <div className="text-[10px] text-teal-600 mb-4 tracking-widest flex items-center gap-2">
+        {(answer || (loading && results.length > 0)) && (
+          <div className="border border-gray-200 rounded-2xl p-6 mb-6 bg-white shadow-sm">
+            <div className="text-[10px] text-teal-600 mb-4 tracking-widest flex items-center gap-2 font-semibold uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"/>
               QUAERYX SYNTHESIS · {results.length} SOURCES
             </div>
             <div
               ref={answerRef}
               className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-[65vh] overflow-y-auto"
+              style={{ fontFamily: "'Inter', system-ui, sans-serif" }}
             >
               {answer}
-              {loading && <span className="animate-pulse text-teal-500">▋</span>}
+              {loading && <span className="animate-pulse text-teal-500 ml-0.5">▋</span>}
             </div>
           </div>
         )}
 
         {/* ── MIROFISH PREDICTION ── */}
         {prediction?.enabled && prediction.prediction && (
-          <div className="border border-purple-200 rounded-xl p-5 bg-purple-50">
+          <div className="border border-purple-200 rounded-2xl p-5 bg-white shadow-sm">
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-[10px] text-purple-600 tracking-widest">◎ MIROFISH SWARM PREDICTION</span>
+              <span className="text-[10px] text-purple-600 tracking-widest font-semibold">◎ MIROFISH SWARM PREDICTION</span>
               {prediction.confidence && (
-                <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
-                  {prediction.confidence}% agent consensus
+                <span className="text-[10px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded-lg font-semibold">
+                  {prediction.confidence}% consensus
                 </span>
               )}
             </div>
             <p className="text-sm text-gray-700 leading-relaxed mb-3">{prediction.prediction}</p>
             {prediction.top_viewpoints && prediction.top_viewpoints.length > 0 && (
-              <div className="space-y-1 border-t border-purple-100 pt-3">
-                <div className="text-[10px] text-gray-400 mb-2">TOP VIEWPOINTS FROM 500 AGENTS</div>
+              <div className="space-y-1.5 border-t border-purple-100 pt-3">
+                <div className="text-[10px] text-gray-400 mb-2 font-semibold tracking-wider uppercase">Top Viewpoints · 500 Agents</div>
                 {prediction.top_viewpoints.map((v, i) => (
-                  <div key={i} className="text-xs text-gray-600 flex gap-2">
-                    <span className="text-purple-500">◎</span>{v}
+                  <div key={i} className="text-xs text-gray-600 flex gap-2 items-start">
+                    <span className="text-purple-400 mt-0.5">◎</span>{v}
                   </div>
                 ))}
               </div>
@@ -283,9 +352,9 @@ export default function Home() {
       </main>
 
       {/* ── FOOTER ── */}
-      <footer className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white px-6 py-2 flex justify-between text-[10px] text-gray-400">
-        <span>QUAERYX · Open Source · Apache 2.0 · github.com/Vinseek91/quaeryx</span>
-        <span>12 sources · OmniRoute · MiroFish swarm intelligence</span>
+      <footer className="fixed bottom-0 left-0 right-0 border-t border-gray-200/80 bg-white/80 backdrop-blur-md px-6 py-2.5 flex justify-between text-[10px] text-gray-400 font-medium">
+        <span>QUAERYX · Open Source · Apache 2.0</span>
+        <a href="https://github.com/Vinseek91/quaeryx" target="_blank" className="hover:text-gray-600 transition-colors">github.com/Vinseek91/quaeryx</a>
       </footer>
     </div>
   );
