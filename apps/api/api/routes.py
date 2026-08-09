@@ -2,8 +2,9 @@
 QUAERYX API Routes
 """
 import asyncio
+import io
 import json
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, File, Form, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
@@ -24,6 +25,7 @@ async def search(
     mode: str = Query("general", description="general | academic | code | news | prediction"),
     stream: bool = Query(True),
     predict: bool = Query(False, description="Enable MiroFish swarm prediction"),
+    model: str = Query("llama-3.3-70b-versatile", description="Groq model to use for synthesis"),
 ):
     """
     QUAERYX unified search — 10+ sources, AI synthesis, optional swarm prediction.
@@ -49,7 +51,7 @@ async def search(
 
             # Stream reasoning (graceful fallback if LLM unavailable)
             try:
-                async for chunk in reasoner.synthesise(q, results, stream=True, mode=effective_mode):
+                async for chunk in reasoner.synthesise(q, results, stream=True, mode=effective_mode, model=model):
                     yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
             except Exception as e:
                 logger.warning(f"Reasoning failed: {e}")
@@ -76,7 +78,7 @@ async def search(
     # Non-streaming
     try:
         answer_parts = []
-        async for chunk in reasoner.synthesise(q, results, stream=False, mode=effective_mode):
+        async for chunk in reasoner.synthesise(q, results, stream=False, mode=effective_mode, model=model):
             answer_parts.append(chunk)
         answer = "".join(answer_parts)
     except Exception as e:
@@ -151,6 +153,63 @@ Results summary: {' '.join([r['snippet'][:100] for r in results[:5]])}"""
         yield f"data: {json.dumps({'type': 'done', 'total_sources': len(all_results)})}\n\n"
 
     return StreamingResponse(research_stream(), media_type="text/event-stream")
+
+
+@router.post("/upload")
+async def upload_and_ask(
+    file: UploadFile = File(...),
+    question: str = Form(...),
+    model: str = Form("llama-3.3-70b-versatile"),
+):
+    """Upload a PDF or text file and ask a question about it."""
+    content = await file.read()
+    filename = file.filename or "document"
+
+    if filename.lower().endswith(".pdf"):
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(content))
+            text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception as e:
+            async def err_stream():
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Could not parse PDF: {e}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return StreamingResponse(err_stream(), media_type="text/event-stream")
+    else:
+        text = content.decode("utf-8", errors="ignore")
+
+    if not text.strip():
+        async def empty_stream():
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': 'No readable text found in the uploaded file.'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        return StreamingResponse(empty_stream(), media_type="text/event-stream")
+
+    async def doc_stream():
+        yield f"data: {json.dumps({'type': 'doc_info', 'data': {'filename': filename, 'chars': len(text)}})}\n\n"
+        try:
+            async for chunk in reasoner.analyse_document(question, text, filename, model=model, stream=True):
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
+        except Exception as e:
+            logger.warning(f"Document analysis failed: {e}")
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Analysis error: {e}'})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(doc_stream(), media_type="text/event-stream")
+
+
+@router.get("/models")
+async def list_models():
+    """List all available free Groq models."""
+    return {
+        "models": [
+            {"id": "llama-3.3-70b-versatile", "label": "Llama 3.3 70B",   "desc": "Best quality · Default",    "free": True},
+            {"id": "llama-3.1-8b-instant",     "label": "Llama 3.1 8B",    "desc": "Lightning fast · 2× speed", "free": True},
+            {"id": "mixtral-8x7b-32768",        "label": "Mixtral 8×7B",    "desc": "32K context window",        "free": True},
+            {"id": "gemma2-9b-it",              "label": "Gemma 2 9B",      "desc": "Google · Efficient",        "free": True},
+            {"id": "llama3-70b-8192",           "label": "Llama 3 70B",     "desc": "Classic · Reliable",        "free": True},
+        ],
+        "note": "All models are completely FREE via Groq — no lock icons, no paywalls."
+    }
 
 
 @router.get("/providers")

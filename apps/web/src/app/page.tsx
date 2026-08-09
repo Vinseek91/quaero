@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 type SearchMode = "general" | "academic" | "code" | "news" | "prediction";
 
@@ -57,6 +57,14 @@ const MODES: { id: SearchMode; label: string; icon: string }[] = [
   { id: "prediction", label: "Predict",  icon: "◎" },
 ];
 
+const GROQ_MODELS = [
+  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B",  desc: "Best quality · Default"   },
+  { id: "llama-3.1-8b-instant",    label: "Llama 3.1 8B",   desc: "Lightning fast · 2× speed" },
+  { id: "mixtral-8x7b-32768",      label: "Mixtral 8×7B",   desc: "32K context window"        },
+  { id: "gemma2-9b-it",            label: "Gemma 2 9B",     desc: "Google · Efficient"        },
+  { id: "llama3-70b-8192",         label: "Llama 3 70B",    desc: "Classic · Reliable"        },
+];
+
 function getFavicon(url: string, source: string): string {
   if (SOURCE_ICONS[source]) return SOURCE_ICONS[source];
   try {
@@ -90,6 +98,23 @@ export default function Home() {
   const [deepResearch, setDeepResearch] = useState(false);
   const [round, setRound]               = useState(0);
   const [visible, setVisible]           = useState(false);
+
+  // Voice search
+  const [isListening, setIsListening]   = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  // File upload
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [docInfo, setDocInfo]           = useState<{ filename: string; chars: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Share
+  const [copied, setCopied]             = useState(false);
+
+  // Model selector
+  const [selectedModel, setSelectedModel] = useState("llama-3.3-70b-versatile");
+  const [showModelMenu, setShowModelMenu] = useState(false);
+
   const answerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setVisible(true); }, []);
@@ -100,23 +125,61 @@ export default function Home() {
     }
   }, [answer]);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
+  // Close model menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-model-menu]")) setShowModelMenu(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
+  // Auto-search from URL params (share links)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("q");
+    const m = params.get("mode") as SearchMode;
+    if (q) {
+      setQuery(q);
+      if (m && MODES.find((x) => x.id === m)) setMode(m);
+      // Delay to let state settle before searching
+      setTimeout(() => runSearch(q, m || "general"), 100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const runSearch = useCallback(async (q: string, m: SearchMode = mode, file?: File | null) => {
+    if (!q.trim()) return;
     setLoading(true);
     setAnswer("");
     setResults([]);
     setPrediction(null);
     setRound(0);
+    setDocInfo(null);
 
     const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const endpoint = deepResearch
-      ? `${API}/api/deep-research?q=${encodeURIComponent(query)}&rounds=3`
-      : `${API}/api/search?q=${encodeURIComponent(query)}&mode=${mode}&stream=true&predict=${mode === "prediction"}`;
+    let endpoint: string;
+    let fetchOptions: RequestInit = {};
+
+    const activeFile = file !== undefined ? file : uploadedFile;
+
+    if (activeFile) {
+      // File upload mode
+      const formData = new FormData();
+      formData.append("file", activeFile);
+      formData.append("question", q);
+      formData.append("model", selectedModel);
+      endpoint = `${API}/api/upload`;
+      fetchOptions = { method: "POST", body: formData };
+    } else if (deepResearch) {
+      endpoint = `${API}/api/deep-research?q=${encodeURIComponent(q)}&rounds=3`;
+    } else {
+      endpoint = `${API}/api/search?q=${encodeURIComponent(q)}&mode=${m}&stream=true&predict=${m === "prediction"}&model=${selectedModel}`;
+    }
 
     try {
-      const resp = await fetch(endpoint);
+      const resp = await fetch(endpoint, fetchOptions);
       const reader = resp.body!.getReader();
       const decoder = new TextDecoder();
 
@@ -132,6 +195,7 @@ export default function Home() {
             if (data.type === "answer_chunk") setAnswer((a) => a + data.data);
             if (data.type === "prediction")   setPrediction(data.data);
             if (data.type === "round_start")  setRound(data.round);
+            if (data.type === "doc_info")     setDocInfo(data.data);
           } catch {}
         }
       }
@@ -140,12 +204,74 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  }, [mode, deepResearch, selectedModel, uploadedFile]);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    runSearch(query, mode);
   };
 
-  return (
-    <div className={`min-h-screen bg-[#f8f9fc] text-gray-800 transition-opacity duration-700 ${visible ? "opacity-100" : "opacity-0"}`}
-      style={{ fontFamily: "'Inter', 'system-ui', sans-serif" }}>
+  // ── Voice search ──
+  const startVoice = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      alert("Voice search requires Chrome or Edge.");
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const rec = new SR();
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.lang = "en-US";
+    rec.onstart  = () => setIsListening(true);
+    rec.onend    = () => setIsListening(false);
+    rec.onerror  = () => setIsListening(false);
+    rec.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setQuery(transcript);
+      setTimeout(() => runSearch(transcript, mode), 200);
+    };
+    recognitionRef.current = rec;
+    rec.start();
+  };
 
+  // ── File upload ──
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setUploadedFile(file);
+    setAnswer("");
+    setResults([]);
+    setDocInfo(null);
+  };
+
+  const clearFile = () => {
+    setUploadedFile(null);
+    setDocInfo(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // ── Share ──
+  const handleShare = () => {
+    const url = new URL(window.location.href.split("?")[0]);
+    url.searchParams.set("q", query);
+    url.searchParams.set("mode", mode);
+    navigator.clipboard.writeText(url.toString()).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const hasResults = results.length > 0 || !!answer;
+  const selectedModelInfo = GROQ_MODELS.find((m) => m.id === selectedModel) ?? GROQ_MODELS[0];
+
+  return (
+    <div
+      className={`min-h-screen bg-[#f8f9fc] text-gray-800 transition-opacity duration-700 ${visible ? "opacity-100" : "opacity-0"}`}
+      style={{ fontFamily: "'Inter', 'system-ui', sans-serif" }}
+    >
       {/* ── HEADER ── */}
       <header className="border-b border-gray-200/80 px-6 py-3.5 flex items-center gap-4 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-2.5">
@@ -157,18 +283,28 @@ export default function Home() {
                 <stop offset="100%" stopColor="#FBBC05"/>
               </linearGradient>
             </defs>
-            {/* Bold Q body */}
             <circle cx="19" cy="19" r="13" fill="url(#qgrad)" opacity="0.12"/>
             <circle cx="19" cy="19" r="13" fill="none" stroke="url(#qgrad)" strokeWidth="3.5"/>
-            {/* Extended tail — the search arrow */}
             <line x1="27" y1="27" x2="38" y2="38" stroke="url(#qgrad)" strokeWidth="4" strokeLinecap="round"/>
-            {/* Inner dot */}
             <circle cx="19" cy="19" r="4" fill="url(#qgrad)"/>
           </svg>
           <span className="text-lg font-bold tracking-widest text-gray-900">QUAERYX</span>
         </div>
         <span className="text-[11px] text-gray-400 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
         <div className="ml-auto flex items-center gap-3">
+          {hasResults && (
+            <button
+              onClick={handleShare}
+              className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
+              title="Copy shareable link"
+            >
+              {copied ? (
+                <><span>✓</span> Copied!</>
+              ) : (
+                <><span>↗</span> Share</>
+              )}
+            </button>
+          )}
           <a
             href="https://github.com/Vinseek91/quaeryx"
             target="_blank"
@@ -182,7 +318,7 @@ export default function Home() {
       <main className="max-w-3xl mx-auto px-4 py-10 pb-24">
 
         {/* ── HERO ── */}
-        {!answer && results.length === 0 && !loading && (
+        {!hasResults && !loading && (
           <div className="text-center mb-12">
             <div className="flex justify-center mb-5">
               <svg width="72" height="72" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -219,16 +355,72 @@ export default function Home() {
 
         {/* ── SEARCH FORM ── */}
         <form onSubmit={handleSearch} className="mb-8">
+
+          {/* File badge */}
+          {uploadedFile && (
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 text-teal-700 text-xs px-3 py-1.5 rounded-xl font-medium">
+                <span>📄</span>
+                <span className="max-w-[200px] truncate">{uploadedFile.name}</span>
+                <span className="text-teal-400">·</span>
+                <span className="text-teal-500">{(uploadedFile.size / 1024).toFixed(0)} KB</span>
+                <button
+                  type="button"
+                  onClick={clearFile}
+                  className="ml-1 text-teal-400 hover:text-teal-700 transition-colors font-bold"
+                >×</button>
+              </div>
+              <span className="text-[10px] text-gray-400 font-medium tracking-wide">Ask anything about this file</span>
+            </div>
+          )}
+
+          {/* Search input row */}
           <div className="flex gap-2.5 mb-4">
-            <div className="flex-1 relative">
+            <div className="flex-1 relative flex items-center">
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search anything — web, academic, code, news..."
-                className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-4 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-50 transition-all placeholder:text-gray-400 text-gray-800 shadow-sm hover:shadow-md hover:border-gray-300"
+                placeholder={uploadedFile ? "Ask a question about the file..." : "Search anything — web, academic, code, news..."}
+                className="w-full bg-white border border-gray-200 rounded-2xl pl-5 pr-20 py-4 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-50 transition-all placeholder:text-gray-400 text-gray-800 shadow-sm hover:shadow-md hover:border-gray-300"
                 autoFocus
               />
+              {/* Inline icon buttons inside input */}
+              <div className="absolute right-3 flex items-center gap-1">
+                {/* File upload button */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-1.5 rounded-lg transition-all ${uploadedFile ? "text-teal-500 bg-teal-50" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"}`}
+                  title="Upload a file (PDF, TXT)"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                  </svg>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.txt,.md,.csv"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                {/* Voice button */}
+                <button
+                  type="button"
+                  onClick={startVoice}
+                  className={`p-1.5 rounded-lg transition-all ${isListening ? "text-red-500 bg-red-50 animate-pulse" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"}`}
+                  title={isListening ? "Listening... (click to stop)" : "Voice search"}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                  </svg>
+                </button>
+              </div>
             </div>
+
             <button
               type="submit"
               disabled={loading}
@@ -244,6 +436,7 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Mode tabs + deep research + model selector */}
           <div className="flex gap-2 flex-wrap items-center">
             {MODES.map((m) => (
               <button
@@ -262,7 +455,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setDeepResearch((d) => !d)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium border transition-all ml-auto ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                 deepResearch
                   ? "border-purple-400 bg-purple-50 text-purple-700 shadow-sm"
                   : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
@@ -270,8 +463,61 @@ export default function Home() {
             >
               ◈ Deep Research
             </button>
+
+            {/* Model selector — all FREE, no lock icons */}
+            <div className="relative ml-auto" data-model-menu>
+              <button
+                type="button"
+                onClick={() => setShowModelMenu((v) => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm transition-all bg-transparent"
+                title="Select AI model — all free"
+              >
+                <span className="text-teal-500">◉</span>
+                <span>{selectedModelInfo.label}</span>
+                <span className="text-gray-300">▾</span>
+              </button>
+              {showModelMenu && (
+                <div className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-gray-500 tracking-widest uppercase">AI Model</span>
+                    <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-lg">ALL FREE</span>
+                  </div>
+                  {GROQ_MODELS.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => { setSelectedModel(m.id); setShowModelMenu(false); }}
+                      className={`w-full text-left px-4 py-3 text-sm transition-colors flex items-center justify-between group ${
+                        selectedModel === m.id
+                          ? "bg-teal-50 text-teal-700"
+                          : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <div>
+                        <div className="font-semibold text-[13px]">{m.label}</div>
+                        <div className="text-[11px] text-gray-400">{m.desc}</div>
+                      </div>
+                      {selectedModel === m.id && (
+                        <span className="text-teal-500 font-bold">✓</span>
+                      )}
+                    </button>
+                  ))}
+                  <div className="px-4 py-2 border-t border-gray-100 text-[10px] text-gray-400 text-center">
+                    Powered by Groq · No paywalls · No lock icons
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </form>
+
+        {/* ── LISTENING INDICATOR ── */}
+        {isListening && (
+          <div className="mb-5 text-xs text-red-500 tracking-wider font-medium flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/>
+            Listening... speak your query
+          </div>
+        )}
 
         {/* ── RESEARCH ROUND ── */}
         {deepResearch && round > 0 && (
@@ -281,8 +527,16 @@ export default function Home() {
           </div>
         )}
 
+        {/* ── DOC INFO ── */}
+        {docInfo && (
+          <div className="mb-4 text-xs text-teal-600 flex items-center gap-2 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-500"/>
+            Analysing <strong>{docInfo.filename}</strong> · {docInfo.chars.toLocaleString()} characters
+          </div>
+        )}
+
         {/* ── SKELETON LOADERS ── */}
-        {loading && results.length === 0 && (
+        {loading && results.length === 0 && !uploadedFile && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
             {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
           </div>
@@ -326,11 +580,11 @@ export default function Home() {
         )}
 
         {/* ── ANSWER ── */}
-        {(answer || (loading && results.length > 0)) && (
+        {(answer || (loading && (results.length > 0 || !!uploadedFile))) && (
           <div className="border border-gray-200 rounded-2xl p-6 mb-6 bg-white shadow-sm">
             <div className="text-[10px] text-teal-600 mb-4 tracking-widest flex items-center gap-2 font-semibold uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"/>
-              QUAERYX SYNTHESIS · {results.length} SOURCES
+              {uploadedFile ? `QUAERYX DOCUMENT ANALYST · ${selectedModelInfo.label}` : `QUAERYX SYNTHESIS · ${results.length} SOURCES · ${selectedModelInfo.label}`}
             </div>
             <div
               ref={answerRef}

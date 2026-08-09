@@ -28,6 +28,7 @@ class ReasoningEngine:
         results: list[dict],
         stream: bool = True,
         mode: str = "general",
+        model: str | None = None,
     ):
         """Synthesise search results into a cited, reasoned answer."""
         context = self._format_results(results)
@@ -40,14 +41,16 @@ Search Results:
 Provide a comprehensive, cited answer. For each key claim, cite [source N].
 End with 3 follow-up research questions."""
 
-        model = self._select_model(mode, len(results))
+        primary_model = self._select_model(mode, len(results))
+        # User-selected Groq model overrides the fallback default
+        groq_model = model or "llama-3.3-70b-versatile"
 
         # Try primary client first, fall back to Groq
-        client, groq_model = self.client, "llama-3.3-70b-versatile"
+        client = self.client
         try:
             if stream:
                 async for chunk in await client.chat.completions.create(
-                    model=model,
+                    model=primary_model,
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": user}],
                     stream=True,
@@ -57,7 +60,7 @@ End with 3 follow-up research questions."""
                         yield chunk.choices[0].delta.content
             else:
                 resp = await client.chat.completions.create(
-                    model=model,
+                    model=primary_model,
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": user}],
                     temperature=0.3,
@@ -86,6 +89,57 @@ End with 3 follow-up research questions."""
                     yield resp.choices[0].message.content
             else:
                 raise
+
+    async def analyse_document(
+        self,
+        question: str,
+        document_text: str,
+        filename: str,
+        model: str | None = None,
+        stream: bool = True,
+    ):
+        """Answer questions about an uploaded document."""
+        system = """You are QUAERYX Document Analyst.
+Analyze the provided document and answer the user's question thoroughly.
+Cite specific sections of the document where relevant.
+If the answer cannot be found in the document, say so clearly.
+Format your response with clear headings and bullet points where appropriate."""
+
+        # Truncate to ~12k chars to avoid token limits
+        truncated = document_text[:12000]
+        if len(document_text) > 12000:
+            truncated += "\n\n[... document truncated — showing first 12,000 characters ...]"
+
+        user = f"""Document: {filename}
+
+Content:
+{truncated}
+
+Question: {question}"""
+
+        groq_model = model or "llama-3.3-70b-versatile"
+        # Prefer Groq for document analysis (reliable cloud availability)
+        client = self.groq_client or self.client
+        actual_model = groq_model if self.groq_client else self._select_model("general", 0)
+
+        if stream:
+            async for chunk in await client.chat.completions.create(
+                model=actual_model,
+                messages=[{"role": "system", "content": system},
+                          {"role": "user", "content": user}],
+                stream=True,
+                temperature=0.3,
+            ):
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        else:
+            resp = await client.chat.completions.create(
+                model=actual_model,
+                messages=[{"role": "system", "content": system},
+                          {"role": "user", "content": user}],
+                temperature=0.3,
+            )
+            yield resp.choices[0].message.content
 
     async def classify_intent(self, query: str) -> dict:
         """Classify query intent to route to right search providers."""
