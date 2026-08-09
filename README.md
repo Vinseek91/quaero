@@ -12,14 +12,14 @@
   <text x="40" y="52" text-anchor="middle" font-size="32" font-weight="700" fill="white" font-family="system-ui">Q</text>
 </svg>
 
-# QUAERO
+# QUAERYX
 
 ### The search engine born from the word *"search"*
 
 *Quaero (Latin): I seek — the root of the word **query** itself*
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/quaero-search/quaero?style=social)](https://github.com/quaero-search/quaero)
+[![Stars](https://img.shields.io/github/stars/quaeryx-search/quaeryx?style=social)](https://github.com/quaeryx-search/quaeryx)
 [![Docker](https://img.shields.io/badge/docker-one%20command-teal.svg)](docker-compose.yml)
 
 **More powerful than Google + Perplexity combined — and completely free.**
@@ -28,9 +28,9 @@
 
 ---
 
-## What Makes QUAERO Different
+## What Makes QUAERYX Different
 
-| | Google | Perplexity | **QUAERO** |
+| | Google | Perplexity | **QUAERYX** |
 |---|---|---|---|
 | Search sources | 1 index | Bing only | **12+ simultaneously** |
 | Gets smarter over time | ✗ | ✗ | **✓ community knowledge graph** |
@@ -47,7 +47,7 @@
 
 ```bash
 # One command — that's it
-docker run -p 3000:3000 -p 8000:8000 quaero/quaero
+docker run -p 3000:3000 -p 8000:8000 quaeryx/quaeryx
 
 # Open http://localhost:3000
 ```
@@ -55,8 +55,8 @@ docker run -p 3000:3000 -p 8000:8000 quaero/quaero
 Or with full stack (recommended):
 
 ```bash
-git clone https://github.com/quaero-search/quaero
-cd quaero
+git clone https://github.com/quaeryx-search/quaeryx
+cd quaeryx
 cp .env.example .env   # add free API keys (optional — works without)
 docker compose up
 ```
@@ -78,7 +78,7 @@ docker compose up
 
 ## MiroFish Swarm Intelligence
 
-QUAERO is the first search engine with built-in **swarm prediction**.
+QUAERYX is the first search engine with built-in **swarm prediction**.
 
 For any query, 500+ AI agents with diverse personalities debate the topic and produce:
 - **Consensus prediction** with confidence %
@@ -89,7 +89,7 @@ For any query, 500+ AI agents with diverse personalities debate the topic and pr
 ```
 Search: "Will quantum computing break current encryption by 2030?"
 
-QUAERO answer: [current state of research, cited]
+QUAERYX answer: [current state of research, cited]
 
 MiroFish prediction:
   72% agent consensus: "Unlikely before 2032"
@@ -136,15 +136,15 @@ GET /api/providers
 ### MCP Server (for AI agents)
 
 ```bash
-# Any AI agent can use QUAERO as a search tool
-claude mcp add quaero http://localhost:8000/mcp
+# Any AI agent can use QUAERYX as a search tool
+claude mcp add quaeryx http://localhost:8000/mcp
 ```
 
 ---
 
 ## Free API Keys (Optional)
 
-QUAERO works without any API keys using DDG + Jina. Add these for better results:
+QUAERYX works without any API keys using DDG + Jina. Add these for better results:
 
 | Provider | Free Tier | Get Key |
 |---|---|---|
@@ -157,7 +157,7 @@ QUAERO works without any API keys using DDG + Jina. Add these for better results
 ## Self-Host in 60 Seconds
 
 ```bash
-curl -fsSL https://get.quaero.dev | bash
+curl -fsSL https://get.quaeryx.dev | bash
 # → runs on http://localhost:3000
 ```
 
@@ -165,7 +165,7 @@ curl -fsSL https://get.quaero.dev | bash
 
 ## Contributing
 
-QUAERO is built for the community. Contributions welcome:
+QUAERYX is built for the community. Contributions welcome:
 
 - **Add a search provider** — `packages/search/aggregator.py`
 - **Improve reasoning** — `packages/reasoning/engine.py`
@@ -173,8 +173,8 @@ QUAERO is built for the community. Contributions welcome:
 - **Add a language** — `i18n/`
 
 ```bash
-git clone https://github.com/quaero-search/quaero
-cd quaero && docker compose up
+git clone https://github.com/quaeryx-search/quaeryx
+cd quaeryx && docker compose up
 ```
 
 ---
@@ -193,7 +193,7 @@ cd quaero && docker compose up
 
 <div align="center">
 
-**QUAERO** — Apache 2.0 — Built for the open source community
+**QUAERYX** — Apache 2.0 — Built for the open source community
 
 *"I seek, therefore I find"*
 

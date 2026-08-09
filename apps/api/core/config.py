@@ -3,7 +3,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # App
-    APP_NAME: str = "QUAERO"
+    APP_NAME: str = "QUAERYX"
     DEBUG: bool = False
     PORT: int = 8000
 
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     QDRANT_URL: str = "http://localhost:6333"
     NEO4J_URL: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = "quaero123"
+    NEO4J_PASSWORD: str = "quaeryx123"
 
     # MiroFish
     MIROFISH_URL: str = "http://localhost:8001"

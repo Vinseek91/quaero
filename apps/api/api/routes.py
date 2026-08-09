@@ -1,5 +1,5 @@
 """
-QUAERO API Routes
+QUAERYX API Routes
 """
 import asyncio
 import json
@@ -26,7 +26,7 @@ async def search(
     predict: bool = Query(False, description="Enable MiroFish swarm prediction"),
 ):
     """
-    QUAERO unified search — 10+ sources, AI synthesis, optional swarm prediction.
+    QUAERYX unified search — 10+ sources, AI synthesis, optional swarm prediction.
     """
     # 1. Classify intent (graceful fallback)
     try:

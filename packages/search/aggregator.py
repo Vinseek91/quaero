@@ -1,5 +1,5 @@
 """
-QUAERO Universal Search Aggregator
+QUAERYX Universal Search Aggregator
 Fans out to 8+ providers simultaneously, deduplicates, scores, and ranks.
 """
 import asyncio
@@ -295,7 +295,7 @@ class UniversalSearchAggregator:
         """Reddit — free JSON API."""
         resp = await self.client.get(
             f"https://www.reddit.com/search.json",
-            headers={"User-Agent": "QUAERO/0.1"},
+            headers={"User-Agent": "QUAERYX/0.1"},
             params={"q": query, "sort": "relevance", "limit": 5},
         )
         data = resp.json()

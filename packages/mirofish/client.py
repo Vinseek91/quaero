@@ -1,5 +1,5 @@
 """
-QUAERO × MiroFish Integration
+QUAERYX × MiroFish Integration
 Swarm intelligence prediction layer — 500+ agents debate the topic,
 producing consensus predictions and controversy maps.
 """
