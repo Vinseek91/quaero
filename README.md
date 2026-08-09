@@ -19,7 +19,7 @@
 *Quaero (Latin): I seek — the root of the word **query** itself*
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/quaeryx-search/quaeryx?style=social)](https://github.com/quaeryx-search/quaeryx)
+[![Stars](https://img.shields.io/github/stars/Vinseek91/quaeryx?style=social)](https://github.com/Vinseek91/quaeryx)
 [![Docker](https://img.shields.io/badge/docker-one%20command-teal.svg)](docker-compose.yml)
 
 **More powerful than Google + Perplexity combined — and completely free.**
@@ -47,7 +47,7 @@
 
 ```bash
 # One command — that's it
-docker run -p 3000:3000 -p 8000:8000 quaeryx/quaeryx
+# Docker image coming soon — use git clone below
 
 # Open http://localhost:3000
 ```
@@ -55,7 +55,7 @@ docker run -p 3000:3000 -p 8000:8000 quaeryx/quaeryx
 Or with full stack (recommended):
 
 ```bash
-git clone https://github.com/quaeryx-search/quaeryx
+git clone https://github.com/Vinseek91/quaeryx
 cd quaeryx
 cp .env.example .env   # add free API keys (optional — works without)
 docker compose up
@@ -173,7 +173,7 @@ QUAERYX is built for the community. Contributions welcome:
 - **Add a language** — `i18n/`
 
 ```bash
-git clone https://github.com/quaeryx-search/quaeryx
+git clone https://github.com/Vinseek91/quaeryx
 cd quaeryx && docker compose up
 ```
 
