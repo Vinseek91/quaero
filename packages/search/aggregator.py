@@ -57,9 +57,10 @@ class UniversalSearchAggregator:
         return [r.to_dict() for r in ranked[:top_k]]
 
     def _select_providers(self, mode: str) -> list:
-        # Always-on free providers (no API key, work from cloud IPs)
-        base = [self._wikipedia_search, self._hn_search, self._reddit_search, self._arxiv_search]
+        # Core web sources — always on, no API key needed
+        base = [self._wikipedia_search, self._ddg_search]
 
+        # Paid web sources (add if API keys configured)
         if self.settings.BRAVE_API_KEY:
             base.append(self._brave_search)
         if self.settings.TAVILY_API_KEY:
@@ -67,10 +68,16 @@ class UniversalSearchAggregator:
         if self.settings.EXA_API_KEY:
             base.append(self._exa_search)
 
+        # Mode-specific sources
         if mode == "academic":
-            base += [self._semantic_scholar_search]
+            base += [self._arxiv_search, self._semantic_scholar_search]
         elif mode == "code":
-            base += [self._github_search, self._stackoverflow_search]
+            base += [self._github_search, self._stackoverflow_search, self._arxiv_search]
+        elif mode == "news":
+            base += [self._hn_search, self._reddit_search]
+        else:
+            # General / prediction — light social context, no academic papers
+            base += [self._hn_search, self._reddit_search]
 
         return base
 
@@ -106,23 +113,27 @@ class UniversalSearchAggregator:
         ]
 
     async def _ddg_search(self, query: str) -> list[SearchResult]:
-        """DuckDuckGo — free, no API key needed."""
-        try:
-            from duckduckgo_search import DDGS
-            results = []
-            ddgs = DDGS()
-            for r in ddgs.text(query, max_results=10):
-                results.append(SearchResult(
-                    title=r.get("title", ""),
-                    url=r.get("href", ""),
-                    snippet=r.get("body", ""),
-                    source="duckduckgo",
-                    score=0.9,
-                ))
-            return results
-        except Exception as e:
-            logger.warning(f"DDG error: {e}")
-            return []
+        """DuckDuckGo — free, no API key needed. Run sync lib in thread pool."""
+        import asyncio
+        def _run():
+            try:
+                from duckduckgo_search import DDGS
+                ddgs = DDGS()
+                return list(ddgs.text(query, max_results=10))
+            except Exception as e:
+                logger.warning(f"DDG error: {e}")
+                return []
+        hits = await asyncio.to_thread(_run)
+        return [
+            SearchResult(
+                title=r.get("title", ""),
+                url=r.get("href", ""),
+                snippet=r.get("body", ""),
+                source="duckduckgo",
+                score=1.0,
+            )
+            for r in hits
+        ]
 
     async def _brave_search(self, query: str) -> list[SearchResult]:
         """Brave Search API — 2000 free req/month."""

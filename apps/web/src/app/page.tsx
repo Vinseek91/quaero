@@ -568,14 +568,7 @@ export default function Home() {
           </svg>
           <span className="text-lg font-bold tracking-widest text-gray-900 dark:text-white">QUAERYX</span>
         </button>
-        {hasResults ? (
-          <button onClick={clearSearch}
-            className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium border border-teal-200 dark:border-teal-800 hover:border-teal-400 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5">
-            ← New Search
-          </button>
-        ) : (
-          <span className="text-[11px] text-gray-400 dark:text-gray-500 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
-        )}
+        <span className="text-[11px] text-gray-400 dark:text-gray-500 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
         <div className="ml-auto flex items-center gap-2">
           {hasResults && (
             <>
@@ -675,6 +668,19 @@ export default function Home() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── NEW SEARCH BUTTON (above search bar when results showing) ── */}
+        {hasResults && (
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={clearSearch}
+              className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-200 font-medium flex items-center gap-1.5 transition-colors"
+            >
+              ← New Search
+            </button>
           </div>
         )}
 
