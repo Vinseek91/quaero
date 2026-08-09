@@ -20,9 +20,8 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/Vinseek91/quaeryx?style=social)](https://github.com/Vinseek91/quaeryx)
-[![Docker](https://img.shields.io/badge/docker-one%20command-teal.svg)](docker-compose.yml)
 
-**More powerful than Google + Perplexity combined — and completely free.**
+**Live at: [quaeryx-search.vercel.app](https://quaeryx-search.vercel.app)**
 
 </div>
 
@@ -46,19 +45,11 @@
 ## Quick Start
 
 ```bash
-# One command — that's it
-# Docker image coming soon — use git clone below
-
-# Open http://localhost:3000
-```
-
-Or with full stack (recommended):
-
-```bash
 git clone https://github.com/Vinseek91/quaeryx
 cd quaeryx
 cp .env.example .env   # add free API keys (optional — works without)
 docker compose up
+# Open http://localhost:3000
 ```
 
 ---
@@ -67,10 +58,10 @@ docker compose up
 
 | Mode | Sources | Best For |
 |---|---|---|
-| **General** | Brave, Exa, Tavily, DDG, Jina | Everything |
+| **General** | Wikipedia, HN, Reddit, ArXiv + optional Brave/Exa/Tavily | Everything |
 | **Academic** | ArXiv, Semantic Scholar + General | Research papers |
 | **Code** | GitHub, Stack Overflow + General | Technical questions |
-| **News** | HN, Reddit + General | Current events |
+| **News** | HackerNews, Reddit + General | Current events |
 | **Predict** | All + **MiroFish swarm** | Future outcomes |
 | **Deep Research** | All sources × 3 rounds | Comprehensive reports |
 
@@ -105,15 +96,15 @@ MiroFish prediction:
 ## Architecture
 
 ```
-Query → Intent Classifier (Gemini Flash, free)
+Query → Intent Classifier (Groq Llama 3.3, free)
       → Universal Search (12 sources, parallel)
-      → Reasoning Engine (OmniRoute: cheapest capable model)
+      → Reasoning Engine (OmniRoute locally / Groq on cloud)
       → MiroFish Layer (optional: 500-agent swarm simulation)
       → Streaming Response (SSE, real-time)
 ```
 
-**Cost per 1,000 searches: ~$0.08**
-(90% of queries hit free model tiers via OmniRoute)
+**Cost per 1,000 searches: ~$0.00**
+(Free tier: Wikipedia, HN, Reddit, ArXiv + Groq AI synthesis)
 
 ---
 
@@ -133,33 +124,27 @@ GET /api/search?q=your+query&predict=true
 GET /api/providers
 ```
 
-### MCP Server (for AI agents)
-
-```bash
-# Any AI agent can use QUAERYX as a search tool
-claude mcp add quaeryx http://localhost:8000/mcp
-```
-
 ---
 
-## Free API Keys (Optional)
+## Free API Keys (Optional — improves results)
 
-QUAERYX works without any API keys using DDG + Jina. Add these for better results:
+QUAERYX works without any API keys. Add these for better results:
 
 | Provider | Free Tier | Get Key |
 |---|---|---|
 | Brave Search | 2,000/month | [brave.com/search/api](https://brave.com/search/api/) |
 | Tavily | 1,000/month | [tavily.com](https://tavily.com) |
 | Exa | 1,000/month | [exa.ai](https://exa.ai) |
+| Groq (AI) | 14,400/day | [console.groq.com](https://console.groq.com) |
 
 ---
 
-## Self-Host in 60 Seconds
+## Deploy
 
-```bash
-curl -fsSL https://get.quaeryx.dev | bash
-# → runs on http://localhost:3000
-```
+| Service | Platform | Status |
+|---|---|---|
+| Frontend | Vercel | [quaeryx-search.vercel.app](https://quaeryx-search.vercel.app) |
+| Backend API | Render | Free tier |
 
 ---
 
@@ -170,7 +155,6 @@ QUAERYX is built for the community. Contributions welcome:
 - **Add a search provider** — `packages/search/aggregator.py`
 - **Improve reasoning** — `packages/reasoning/engine.py`
 - **Build the knowledge graph** — `packages/graph/`
-- **Add a language** — `i18n/`
 
 ```bash
 git clone https://github.com/Vinseek91/quaeryx
@@ -182,12 +166,11 @@ cd quaeryx && docker compose up
 ## Stack
 
 - **Backend** — FastAPI, Python, async/SSE streaming
-- **Frontend** — Next.js 15, Tailwind CSS
-- **Search** — Brave, Exa, Tavily, DDG, Jina, ArXiv, GitHub, SO, HN, Reddit
-- **Models** — OmniRoute → Gemini Flash (free) + Claude Sonnet (reasoning)
+- **Frontend** — Next.js, Tailwind CSS
+- **Search** — Wikipedia, HN, Reddit, ArXiv, GitHub, SO + optional Brave/Exa/Tavily
+- **Models** — OmniRoute (local) / Groq Llama 3.3 (cloud, free)
 - **Prediction** — MiroFish swarm intelligence engine
-- **Storage** — Redis (cache) + Qdrant (vectors)
-- **Deploy** — Docker Compose (one command)
+- **Deploy** — Vercel (frontend) + Render (backend)
 
 ---
 
