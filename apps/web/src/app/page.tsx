@@ -533,6 +533,14 @@ export default function Home() {
     setAnswer(""); setResults([]); setDocInfo(null);
   };
 
+  const clearSearch = () => {
+    setQuery(""); setResults([]); setAnswer(""); setPrediction(null);
+    setImages([]); setDocInfo(null); setFollowUps([]);
+    setUploadedFile(null); setConnector(null); setConnectorInput("");
+    setDeepResearch(false); setRound(0);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const hasResults = results.length > 0 || !!answer;
   const selectedModelInfo = GROQ_MODELS.find((m) => m.id === selectedModel) ?? GROQ_MODELS[0];
   const isConnectorMode = !!uploadedFile || (connector !== null);
@@ -544,7 +552,7 @@ export default function Home() {
     >
       {/* ── HEADER ── */}
       <header className="border-b border-gray-200/80 dark:border-[#2a2d3a]/80 px-6 py-3.5 flex items-center gap-4 bg-white/80 dark:bg-[#1a1d27]/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center gap-2.5">
+        <button onClick={clearSearch} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity" title="Back to home">
           <svg width="34" height="34" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <linearGradient id="qgrad" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
@@ -559,42 +567,49 @@ export default function Home() {
             <circle cx="19" cy="19" r="4" fill="url(#qgrad)"/>
           </svg>
           <span className="text-lg font-bold tracking-widest text-gray-900 dark:text-white">QUAERYX</span>
-        </div>
-        <span className="text-[11px] text-gray-400 dark:text-gray-500 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
+        </button>
+        {hasResults ? (
+          <button onClick={clearSearch}
+            className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium border border-teal-200 dark:border-teal-800 hover:border-teal-400 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5">
+            ← New Search
+          </button>
+        ) : (
+          <span className="text-[11px] text-gray-400 dark:text-gray-500 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           {hasResults && (
             <>
               <button onClick={handleExport}
-                className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
+                className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
                 title="Download as Markdown">
                 {exported ? <><span>✓</span> Saved!</> : <><span>↓</span> Export</>}
               </button>
               <button onClick={handleShare}
-                className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5">
+                className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5">
                 {copied ? <><span>✓</span> Copied!</> : <><span>↗</span> Share</>}
               </button>
             </>
           )}
           {/* Collections */}
           <button onClick={() => setShowCollections(true)}
-            className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
+            className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
             title="Saved searches">
-            ◈ {collections.length > 0 && <span className="bg-teal-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">{collections.length}</span>}
-          </button>
-          {/* Settings */}
-          <button onClick={() => setShowSettings(true)}
-            className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 w-8 h-8 rounded-lg hover:shadow-sm flex items-center justify-center"
-            title="API key settings">
-            ⚙
+            Saved {collections.length > 0 && <span className="bg-teal-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">{collections.length}</span>}
           </button>
           {/* Dark mode toggle */}
           <button onClick={toggleDark}
-            className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 w-8 h-8 rounded-lg hover:shadow-sm flex items-center justify-center"
+            className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
             title={isDark ? "Switch to light mode" : "Switch to dark mode"}>
-            {isDark ? "☀" : "☾"}
+            {isDark ? "Light" : "Dark"}
+          </button>
+          {/* Settings */}
+          <button onClick={() => setShowSettings(true)}
+            className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
+            title="API key settings">
+            API Keys
           </button>
           <a href="https://github.com/Vinseek91/quaeryx" target="_blank"
-            className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5">
+            className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5">
             <span>★</span> GitHub
           </a>
         </div>
@@ -1228,6 +1243,7 @@ export default function Home() {
         <span className="flex items-center gap-3">
           <span>QUAERYX · Apache 2.0</span>
           <a href="/api-docs" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors hidden sm:inline">API Docs</a>
+          <a href="/admin" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors hidden sm:inline">Analytics</a>
         </span>
         <a href="https://github.com/Vinseek91/quaeryx" target="_blank" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors hidden sm:inline">github.com/Vinseek91/quaeryx</a>
       </footer>

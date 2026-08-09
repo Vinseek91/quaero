@@ -11,16 +11,24 @@ from core.config import settings
 
 class ReasoningEngine:
     def __init__(self):
-        # Primary: OmniRoute (local) or configured base URL
-        self.client = AsyncOpenAI(
-            base_url=settings.OPENAI_BASE_URL,
-            api_key=settings.OPENAI_API_KEY,
-        )
-        # Fallback: Groq free API
+        # Groq free API (primary on cloud; fallback locally)
         self.groq_client = AsyncOpenAI(
             base_url="https://api.groq.com/openai/v1",
             api_key=settings.GROQ_API_KEY,
         ) if settings.GROQ_API_KEY else None
+
+        # OmniRoute / local LLM — only used if base URL is NOT localhost
+        # (localhost:20128 is unreachable when deployed on Render/cloud)
+        base_url = settings.OPENAI_BASE_URL
+        is_local = "localhost" in base_url or "127.0.0.1" in base_url
+        if is_local and self.groq_client:
+            # On cloud with Groq available — skip OmniRoute entirely
+            self.client = None
+        else:
+            self.client = AsyncOpenAI(
+                base_url=base_url,
+                api_key=settings.OPENAI_API_KEY,
+            )
 
     async def synthesise(
         self,
@@ -61,50 +69,42 @@ Search Results:
 Provide a comprehensive, cited answer. For each key claim, cite [source N].
 End with 3 follow-up research questions.{lang_note}"""
 
-        primary_model = self._select_model(mode, len(results))
-        # User-selected Groq model overrides the fallback default
         groq_model = model or "llama-3.3-70b-versatile"
+        primary_model = self._select_model(mode, len(results))
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
-        # Try primary client first, fall back to Groq
-        client = self.client
+        # Choose client: prefer Groq if available (cloud-reliable), else OmniRoute/local
+        active_client = self.groq_client or self.client
+        active_model  = groq_model if active_client is self.groq_client else primary_model
+
+        if active_client is None:
+            raise RuntimeError("No LLM available — set GROQ_API_KEY in environment variables")
+
         try:
             if stream:
-                async for chunk in await client.chat.completions.create(
-                    model=primary_model,
-                    messages=[{"role": "system", "content": system},
-                              {"role": "user", "content": user}],
-                    stream=True,
-                    temperature=0.3,
+                async for chunk in await active_client.chat.completions.create(
+                    model=active_model, messages=messages, stream=True, temperature=0.3,
                 ):
                     if chunk.choices[0].delta.content:
                         yield chunk.choices[0].delta.content
             else:
-                resp = await client.chat.completions.create(
-                    model=primary_model,
-                    messages=[{"role": "system", "content": system},
-                              {"role": "user", "content": user}],
-                    temperature=0.3,
+                resp = await active_client.chat.completions.create(
+                    model=active_model, messages=messages, temperature=0.3,
                 )
                 yield resp.choices[0].message.content
         except Exception as e:
-            logger.warning(f"Primary LLM failed: {e} — trying Groq fallback")
-            if self.groq_client:
+            # If Groq failed and we have OmniRoute as backup, try it
+            if active_client is self.groq_client and self.client:
+                logger.warning(f"Groq failed: {e} — trying OmniRoute fallback")
                 if stream:
-                    async for chunk in await self.groq_client.chat.completions.create(
-                        model=groq_model,
-                        messages=[{"role": "system", "content": system},
-                                  {"role": "user", "content": user}],
-                        stream=True,
-                        temperature=0.3,
+                    async for chunk in await self.client.chat.completions.create(
+                        model=primary_model, messages=messages, stream=True, temperature=0.3,
                     ):
                         if chunk.choices[0].delta.content:
                             yield chunk.choices[0].delta.content
                 else:
-                    resp = await self.groq_client.chat.completions.create(
-                        model=groq_model,
-                        messages=[{"role": "system", "content": system},
-                                  {"role": "user", "content": user}],
-                        temperature=0.3,
+                    resp = await self.client.chat.completions.create(
+                        model=primary_model, messages=messages, temperature=0.3,
                     )
                     yield resp.choices[0].message.content
             else:

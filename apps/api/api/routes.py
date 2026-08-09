@@ -6,6 +6,7 @@ import io
 import json
 import re
 import time
+from collections import Counter, deque
 from fastapi import APIRouter, File, Form, Header, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from loguru import logger
@@ -24,11 +25,19 @@ def _cache_get(key: str):
 
 def _cache_set(key: str, val: any):
     _cache[key] = (time.time(), val)
-    # Keep cache size bounded
     if len(_cache) > 500:
         oldest = sorted(_cache.items(), key=lambda x: x[1][0])[:100]
         for k, _ in oldest:
             del _cache[k]
+
+# ── Analytics counters (in-memory, resets on restart) ─────────────────────
+_stats = {
+    "total_searches": 0,
+    "searches_by_mode": Counter(),
+    "top_queries": Counter(),
+    "searches_by_hour": Counter(),   # key = "YYYY-MM-DD HH"
+    "started_at": time.time(),
+}
 
 from core.config import settings
 from packages.search.aggregator import UniversalSearchAggregator
@@ -53,6 +62,18 @@ async def search(
     """
     QUAERYX unified search — 10+ sources, AI synthesis, optional swarm prediction.
     """
+    # Track analytics
+    _stats["total_searches"] += 1
+    _stats["searches_by_mode"][mode] += 1
+    _stats["top_queries"][q[:80]] += 1
+    hour_key = time.strftime("%Y-%m-%d %H")
+    _stats["searches_by_hour"][hour_key] += 1
+    # Keep top_queries bounded to 1000 entries
+    if len(_stats["top_queries"]) > 1000:
+        least = _stats["top_queries"].most_common()[:-201:-1]
+        for k, _ in least:
+            del _stats["top_queries"][k]
+
     # 0. Detect language
     detected_lang = "en"
     try:
@@ -514,4 +535,28 @@ async def list_providers():
             "exa": bool(settings.EXA_API_KEY),
             "mirofish": settings.MIROFISH_ENABLED,
         }
+    }
+
+
+@router.get("/stats")
+async def get_stats():
+    """Analytics stats — total searches, popular queries, usage by mode/hour."""
+    uptime_secs = int(time.time() - _stats["started_at"])
+    uptime_str = f"{uptime_secs // 3600}h {(uptime_secs % 3600) // 60}m"
+
+    # Last 24 hours by hour
+    now_hour = time.strftime("%Y-%m-%d %H")
+    hours_24 = []
+    for h in range(23, -1, -1):
+        ts = time.time() - h * 3600
+        key = time.strftime("%Y-%m-%d %H", time.localtime(ts))
+        hours_24.append({"hour": key[-5:], "count": _stats["searches_by_hour"].get(key, 0)})
+
+    return {
+        "total_searches": _stats["total_searches"],
+        "uptime": uptime_str,
+        "top_queries": [{"query": q, "count": c} for q, c in _stats["top_queries"].most_common(20)],
+        "by_mode": dict(_stats["searches_by_mode"]),
+        "last_24h": hours_24,
+        "cache_size": len(_cache),
     }
