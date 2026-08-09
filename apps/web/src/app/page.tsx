@@ -491,11 +491,11 @@ export default function Home() {
 
   return (
     <div
-      className={`min-h-screen bg-[#f8f9fc] text-gray-800 transition-opacity duration-700 ${visible ? "opacity-100" : "opacity-0"}`}
+      className={`min-h-screen bg-[#f8f9fc] dark:bg-[#0f1117] text-gray-800 dark:text-[#e8eaf0] transition-opacity duration-700 ${visible ? "opacity-100" : "opacity-0"}`}
       style={{ fontFamily: "'Inter', 'system-ui', sans-serif" }}
     >
       {/* ── HEADER ── */}
-      <header className="border-b border-gray-200/80 px-6 py-3.5 flex items-center gap-4 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+      <header className="border-b border-gray-200/80 dark:border-[#2a2d3a]/80 px-6 py-3.5 flex items-center gap-4 bg-white/80 dark:bg-[#1a1d27]/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-2.5">
           <svg width="34" height="34" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -510,9 +510,9 @@ export default function Home() {
             <line x1="27" y1="27" x2="38" y2="38" stroke="url(#qgrad)" strokeWidth="4" strokeLinecap="round"/>
             <circle cx="19" cy="19" r="4" fill="url(#qgrad)"/>
           </svg>
-          <span className="text-lg font-bold tracking-widest text-gray-900">QUAERYX</span>
+          <span className="text-lg font-bold tracking-widest text-gray-900 dark:text-white">QUAERYX</span>
         </div>
-        <span className="text-[11px] text-gray-400 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
+        <span className="text-[11px] text-gray-400 dark:text-gray-500 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
         <div className="ml-auto flex items-center gap-2">
           {hasResults && (
             <>
@@ -660,7 +660,7 @@ export default function Home() {
                   connector === "gdrive"  ? "Search your Google Drive..." :
                   "Search anything — or paste a URL / YouTube link..."
                 }
-                className="w-full bg-white border border-gray-200 rounded-2xl pl-5 pr-20 py-4 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-50 transition-all placeholder:text-gray-400 text-gray-800 shadow-sm hover:shadow-md hover:border-gray-300"
+                className="w-full bg-white dark:bg-[#1a1d27] border border-gray-200 dark:border-[#2a2d3a] rounded-2xl pl-5 pr-20 py-4 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-50 dark:focus:ring-teal-900/30 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 text-gray-800 dark:text-[#e8eaf0] shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-[#3a3d4a]"
                 autoFocus
               />
               <div className="absolute right-3 flex items-center gap-1">
@@ -694,8 +694,8 @@ export default function Home() {
 
               {/* History dropdown */}
               {showHistory && history.length > 0 && !query && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 overflow-hidden">
-                  <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
+                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-[#1a1d27] border border-gray-200 dark:border-[#2a2d3a] rounded-2xl shadow-xl z-40 overflow-hidden">
+                  <div className="px-4 py-2 border-b border-gray-100 dark:border-[#2a2d3a] flex items-center justify-between">
                     <span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">Recent searches</span>
                     <button type="button" onClick={clearHistory} className="text-[10px] text-gray-400 hover:text-red-500 transition-colors">Clear</button>
                   </div>
@@ -704,7 +704,7 @@ export default function Home() {
                       key={i}
                       type="button"
                       onClick={() => { setQuery(h); setShowHistory(false); runSearch(h, mode); }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3a] flex items-center gap-3 transition-colors"
                     >
                       <span className="text-gray-300 text-xs">↩</span>
                       {h}
@@ -782,8 +782,8 @@ export default function Home() {
                 <span className="text-gray-300">▾</span>
               </button>
               {showModelMenu && (
-                <div className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+                <div className="absolute right-0 top-full mt-1.5 w-64 bg-white dark:bg-[#1a1d27] border border-gray-200 dark:border-[#2a2d3a] rounded-2xl shadow-xl z-40 overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-gray-100 dark:border-[#2a2d3a] flex items-center justify-between">
                     <span className="text-[10px] font-semibold text-gray-500 tracking-widest uppercase">AI Model</span>
                     <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-lg">ALL FREE</span>
                   </div>
@@ -793,7 +793,7 @@ export default function Home() {
                       type="button"
                       onClick={() => { setSelectedModel(m.id); setShowModelMenu(false); }}
                       className={`w-full text-left px-4 py-3 text-sm transition-colors flex items-center justify-between ${
-                        selectedModel === m.id ? "bg-teal-50 text-teal-700" : "text-gray-700 hover:bg-gray-50"
+                        selectedModel === m.id ? "bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300" : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3a]"
                       }`}
                     >
                       <div>
@@ -803,7 +803,7 @@ export default function Home() {
                       {selectedModel === m.id && <span className="text-teal-500 font-bold">✓</span>}
                     </button>
                   ))}
-                  <div className="px-4 py-2 border-t border-gray-100 text-[10px] text-gray-400 text-center">
+                  <div className="px-4 py-2 border-t border-gray-100 dark:border-[#2a2d3a] text-[10px] text-gray-400 text-center">
                     Powered by Groq · No paywalls · No lock icons
                   </div>
                 </div>
@@ -818,7 +818,7 @@ export default function Home() {
                 value={connectorInput}
                 onChange={(e) => setConnectorInput(e.target.value)}
                 placeholder={connector === "youtube" ? "Paste YouTube URL..." : "Paste any webpage URL..."}
-                className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-50 transition-all placeholder:text-gray-400 text-gray-800 shadow-sm"
+                className="flex-1 bg-white dark:bg-[#1a1d27] border border-gray-200 dark:border-[#2a2d3a] rounded-xl px-4 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-50 dark:focus:ring-teal-900/30 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 text-gray-800 dark:text-[#e8eaf0] shadow-sm"
               />
             </div>
           )}
@@ -897,7 +897,7 @@ export default function Home() {
                 href={r.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="border border-gray-200 rounded-2xl p-4 hover:border-gray-300 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 block group bg-white shadow-sm"
+                className="border border-gray-200 dark:border-[#2a2d3a] rounded-2xl p-4 hover:border-gray-300 dark:hover:border-[#3a3d4a] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 block group bg-white dark:bg-[#1a1d27] shadow-sm"
               >
                 <div className="flex items-center gap-2 mb-2.5">
                   <img
@@ -914,8 +914,8 @@ export default function Home() {
                     <span className="text-[10px] px-1.5 py-0.5 rounded-lg bg-teal-50 text-teal-600 font-semibold ml-auto">×{r.appearances}</span>
                   )}
                 </div>
-                <p className="text-sm text-gray-800 line-clamp-2 group-hover:text-gray-900 transition-colors font-semibold leading-snug mb-1.5">{r.title}</p>
-                <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">{r.snippet}</p>
+                <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-2 group-hover:text-gray-900 dark:group-hover:text-white transition-colors font-semibold leading-snug mb-1.5">{r.title}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 line-clamp-2 leading-relaxed">{r.snippet}</p>
               </a>
             ))}
           </div>
@@ -923,7 +923,7 @@ export default function Home() {
 
         {/* ── ANSWER ── */}
         {(answer || (loading && (results.length > 0 || isConnectorMode))) && (
-          <div className="border border-gray-200 rounded-2xl p-6 mb-6 bg-white shadow-sm">
+          <div className="border border-gray-200 dark:border-[#2a2d3a] rounded-2xl p-6 mb-6 bg-white dark:bg-[#1a1d27] shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className="text-[10px] text-teal-600 tracking-widest flex items-center gap-2 font-semibold uppercase">
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"/>
@@ -941,7 +941,7 @@ export default function Home() {
             </div>
             <div
               ref={answerRef}
-              className="text-sm text-gray-700 leading-relaxed max-h-[65vh] overflow-y-auto prose prose-sm prose-gray max-w-none"
+              className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed max-h-[65vh] overflow-y-auto prose prose-sm prose-gray dark:prose-invert max-w-none"
             >
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
@@ -992,7 +992,7 @@ export default function Home() {
                     setUploadedFile(null);
                     runSearch(q, mode);
                   }}
-                  className="text-left text-sm text-gray-700 bg-white border border-gray-200 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 rounded-xl px-4 py-3 transition-all shadow-sm hover:shadow-md flex items-center gap-3 group"
+                  className="text-left text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-[#1a1d27] border border-gray-200 dark:border-[#2a2d3a] hover:border-teal-300 dark:hover:border-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/20 hover:text-teal-800 dark:hover:text-teal-300 rounded-xl px-4 py-3 transition-all shadow-sm hover:shadow-md flex items-center gap-3 group"
                 >
                   <span className="text-teal-400 group-hover:text-teal-600 transition-colors flex-shrink-0">→</span>
                   {q}
@@ -1030,7 +1030,7 @@ export default function Home() {
       </main>
 
       {/* ── FOOTER ── */}
-      <footer className="fixed bottom-0 left-0 right-0 border-t border-gray-200/80 bg-white/80 backdrop-blur-md px-6 py-2.5 flex justify-between text-[10px] text-gray-400 font-medium">
+      <footer className="fixed bottom-0 left-0 right-0 border-t border-gray-200/80 dark:border-[#2a2d3a]/80 bg-white/80 dark:bg-[#1a1d27]/80 backdrop-blur-md px-6 py-2.5 flex justify-between text-[10px] text-gray-400 font-medium">
         <span>QUAERYX · Open Source · Apache 2.0</span>
         <a href="https://github.com/Vinseek91/quaeryx" target="_blank" className="hover:text-gray-600 transition-colors">github.com/Vinseek91/quaeryx</a>
       </footer>
