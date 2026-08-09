@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type SearchMode = "general" | "academic" | "code" | "news" | "prediction";
 type ConnectorType = null | "url" | "youtube" | "gdrive";
@@ -77,6 +79,33 @@ function getFavicon(url: string, source: string): string {
 function isYouTubeUrl(s: string) { return /youtube\.com|youtu\.be/.test(s); }
 function isHttpUrl(s: string)    { return /^https?:\/\/\S+/.test(s.trim()); }
 
+/** Replace [source N] / [N] in the AI answer with clickable markdown links. */
+function processCitations(text: string, results: SearchResult[]): string {
+  return text.replace(/\[(?:source\s+)?(\d+)\]/gi, (_match, num) => {
+    const idx = parseInt(num, 10) - 1;
+    const result = results[idx];
+    return result ? `[[${num}]](${result.url})` : `[${num}]`;
+  });
+}
+
+/** Extract the last 3 questions (?) from the answer as follow-up suggestions. */
+function extractFollowUps(text: string): string[] {
+  const questions: string[] = [];
+  for (const line of text.split("\n")) {
+    const clean = line
+      .trim()
+      .replace(/^\d+[\.\)]\s*/, "")   // remove "1. " or "1) "
+      .replace(/^\*+\s*/, "")          // remove "* "
+      .replace(/\*\*/g, "")            // remove **bold**
+      .trim();
+    if (clean.endsWith("?") && clean.length > 25 && clean.length < 220) {
+      questions.push(clean);
+    }
+  }
+  // Return up to 3, preferring the last ones (AI puts follow-ups at end)
+  return questions.slice(-3);
+}
+
 function SkeletonCard() {
   return (
     <div className="border border-gray-100 rounded-2xl p-4 bg-white shadow-sm animate-pulse">
@@ -115,6 +144,9 @@ export default function Home() {
   const [gdriveToken, setGdriveToken]   = useState<string | null>(null);
   const [docInfo, setDocInfo]           = useState<{ filename: string; chars: number } | null>(null);
 
+  // Follow-up questions
+  const [followUps, setFollowUps]       = useState<string[]>([]);
+
   // Share
   const [copied, setCopied]             = useState(false);
 
@@ -125,6 +157,13 @@ export default function Home() {
   const answerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setVisible(true); }, []);
+
+  // Extract follow-up questions once answer is complete
+  useEffect(() => {
+    if (!loading && answer) {
+      setFollowUps(extractFollowUps(answer));
+    }
+  }, [loading, answer]);
 
   useEffect(() => {
     if (answerRef.current) answerRef.current.scrollTop = answerRef.current.scrollHeight;
@@ -187,6 +226,7 @@ export default function Home() {
     setPrediction(null);
     setRound(0);
     setDocInfo(null);
+    setFollowUps([]);
 
     const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     let endpoint = "";
@@ -700,10 +740,63 @@ export default function Home() {
             </div>
             <div
               ref={answerRef}
-              className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-[65vh] overflow-y-auto"
+              className="text-sm text-gray-700 leading-relaxed max-h-[65vh] overflow-y-auto prose prose-sm prose-gray max-w-none"
             >
-              {answer}
-              {loading && <span className="animate-pulse text-teal-500 ml-0.5">▋</span>}
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer"
+                      className="text-teal-600 hover:text-teal-800 underline underline-offset-2 font-medium">
+                      {children}
+                    </a>
+                  ),
+                  h1: ({ children }) => <h1 className="text-lg font-bold text-gray-900 mt-4 mb-2">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-base font-bold text-gray-900 mt-4 mb-2">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-sm font-bold text-gray-800 mt-3 mb-1">{children}</h3>,
+                  p:  ({ children }) => <p className="mb-3 leading-relaxed">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
+                  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                  strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                  code: ({ children }) => <code className="bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded text-[12px] font-mono">{children}</code>,
+                  pre: ({ children }) => <pre className="bg-gray-50 border border-gray-200 rounded-xl p-4 overflow-x-auto text-[12px] font-mono mb-3">{children}</pre>,
+                  blockquote: ({ children }) => <blockquote className="border-l-4 border-teal-300 pl-4 text-gray-500 italic mb-3">{children}</blockquote>,
+                  table: ({ children }) => <div className="overflow-x-auto mb-3"><table className="w-full text-xs border-collapse">{children}</table></div>,
+                  th: ({ children }) => <th className="border border-gray-200 px-3 py-2 bg-gray-50 font-semibold text-left">{children}</th>,
+                  td: ({ children }) => <td className="border border-gray-200 px-3 py-2">{children}</td>,
+                }}
+              >
+                {processCitations(answer, results)}
+              </ReactMarkdown>
+              {loading && <span className="animate-pulse text-teal-500">▋</span>}
+            </div>
+          </div>
+        )}
+
+        {/* ── FOLLOW-UP QUESTIONS ── */}
+        {!loading && followUps.length > 0 && (
+          <div className="mb-6">
+            <div className="text-[10px] text-gray-400 tracking-widest font-semibold uppercase mb-3 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-300"/>
+              Follow-up questions
+            </div>
+            <div className="flex flex-col gap-2">
+              {followUps.map((q, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setQuery(q);
+                    setConnector(null);
+                    setUploadedFile(null);
+                    runSearch(q, mode);
+                  }}
+                  className="text-left text-sm text-gray-700 bg-white border border-gray-200 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 rounded-xl px-4 py-3 transition-all shadow-sm hover:shadow-md flex items-center gap-3 group"
+                >
+                  <span className="text-teal-400 group-hover:text-teal-600 transition-colors flex-shrink-0">→</span>
+                  {q}
+                </button>
+              ))}
             </div>
           </div>
         )}
