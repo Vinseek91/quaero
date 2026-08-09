@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 type SearchMode = "general" | "academic" | "code" | "news" | "prediction";
+type ConnectorType = null | "url" | "youtube" | "gdrive";
 
 interface SearchResult {
   title: string;
@@ -58,11 +59,11 @@ const MODES: { id: SearchMode; label: string; icon: string }[] = [
 ];
 
 const GROQ_MODELS = [
-  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B",  desc: "Best quality · Default"   },
+  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B",  desc: "Best quality · Default"    },
   { id: "llama-3.1-8b-instant",    label: "Llama 3.1 8B",   desc: "Lightning fast · 2× speed" },
-  { id: "mixtral-8x7b-32768",      label: "Mixtral 8×7B",   desc: "32K context window"        },
-  { id: "gemma2-9b-it",            label: "Gemma 2 9B",     desc: "Google · Efficient"        },
-  { id: "llama3-70b-8192",         label: "Llama 3 70B",    desc: "Classic · Reliable"        },
+  { id: "mixtral-8x7b-32768",      label: "Mixtral 8×7B",   desc: "32K context window"         },
+  { id: "gemma2-9b-it",            label: "Gemma 2 9B",     desc: "Google · Efficient"         },
+  { id: "llama3-70b-8192",         label: "Llama 3 70B",    desc: "Classic · Reliable"         },
 ];
 
 function getFavicon(url: string, source: string): string {
@@ -70,10 +71,11 @@ function getFavicon(url: string, source: string): string {
   try {
     const domain = new URL(url).hostname;
     return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
-  } catch {
-    return "";
-  }
+  } catch { return ""; }
 }
+
+function isYouTubeUrl(s: string) { return /youtube\.com|youtu\.be/.test(s); }
+function isHttpUrl(s: string)    { return /^https?:\/\/\S+/.test(s.trim()); }
 
 function SkeletonCard() {
   return (
@@ -99,14 +101,19 @@ export default function Home() {
   const [round, setRound]               = useState(0);
   const [visible, setVisible]           = useState(false);
 
-  // Voice search
+  // Voice
   const [isListening, setIsListening]   = useState(false);
   const recognitionRef = useRef<any>(null);
 
   // File upload
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [docInfo, setDocInfo]           = useState<{ filename: string; chars: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Connectors
+  const [connector, setConnector]       = useState<ConnectorType>(null);
+  const [connectorInput, setConnectorInput] = useState(""); // URL or YT link
+  const [gdriveToken, setGdriveToken]   = useState<string | null>(null);
+  const [docInfo, setDocInfo]           = useState<{ filename: string; chars: number } | null>(null);
 
   // Share
   const [copied, setCopied]             = useState(false);
@@ -120,22 +127,46 @@ export default function Home() {
   useEffect(() => { setVisible(true); }, []);
 
   useEffect(() => {
-    if (answerRef.current) {
-      answerRef.current.scrollTop = answerRef.current.scrollHeight;
-    }
+    if (answerRef.current) answerRef.current.scrollTop = answerRef.current.scrollHeight;
   }, [answer]);
 
   // Close model menu on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest("[data-model-menu]")) setShowModelMenu(false);
+      if (!(e.target as HTMLElement).closest("[data-model-menu]")) setShowModelMenu(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Auto-search from URL params (share links)
+  // Listen for Google Drive token from OAuth popup
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "gdrive_token") {
+        setGdriveToken(e.data.token);
+        setConnector("gdrive");
+      }
+    };
+    window.addEventListener("message", handler);
+    // Also check localStorage (fallback)
+    const saved = localStorage.getItem("gdrive_token");
+    if (saved) { setGdriveToken(saved); }
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  // Auto-detect YouTube / URL when user pastes
+  const handleQueryChange = (val: string) => {
+    setQuery(val);
+    if (isYouTubeUrl(val)) {
+      setConnector("youtube");
+      setConnectorInput(val);
+    } else if (isHttpUrl(val) && connector !== "gdrive") {
+      setConnector("url");
+      setConnectorInput(val);
+    }
+  };
+
+  // Auto-search from share link
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get("q");
@@ -143,14 +174,13 @@ export default function Home() {
     if (q) {
       setQuery(q);
       if (m && MODES.find((x) => x.id === m)) setMode(m);
-      // Delay to let state settle before searching
       setTimeout(() => runSearch(q, m || "general"), 100);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const runSearch = useCallback(async (q: string, m: SearchMode = mode, file?: File | null) => {
-    if (!q.trim()) return;
+  const runSearch = useCallback(async (q: string, m: SearchMode = mode) => {
+    if (!q.trim() && !connectorInput.trim()) return;
     setLoading(true);
     setAnswer("");
     setResults([]);
@@ -159,19 +189,37 @@ export default function Home() {
     setDocInfo(null);
 
     const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    let endpoint: string;
+    let endpoint = "";
     let fetchOptions: RequestInit = {};
 
-    const activeFile = file !== undefined ? file : uploadedFile;
-
-    if (activeFile) {
-      // File upload mode
-      const formData = new FormData();
-      formData.append("file", activeFile);
-      formData.append("question", q);
-      formData.append("model", selectedModel);
+    if (uploadedFile) {
+      const fd = new FormData();
+      fd.append("file", uploadedFile);
+      fd.append("question", q);
+      fd.append("model", selectedModel);
       endpoint = `${API}/api/upload`;
-      fetchOptions = { method: "POST", body: formData };
+      fetchOptions = { method: "POST", body: fd };
+    } else if (connector === "youtube") {
+      const fd = new FormData();
+      fd.append("url", connectorInput || q);
+      fd.append("question", q);
+      fd.append("model", selectedModel);
+      endpoint = `${API}/api/youtube`;
+      fetchOptions = { method: "POST", body: fd };
+    } else if (connector === "url") {
+      const fd = new FormData();
+      fd.append("url", connectorInput || q);
+      fd.append("question", q);
+      fd.append("model", selectedModel);
+      endpoint = `${API}/api/url`;
+      fetchOptions = { method: "POST", body: fd };
+    } else if (connector === "gdrive" && gdriveToken) {
+      const fd = new FormData();
+      fd.append("q", q);
+      fd.append("question", q);
+      fd.append("model", selectedModel);
+      endpoint = `${API}/api/gdrive/search`;
+      fetchOptions = { method: "POST", body: fd, headers: { Authorization: `Bearer ${gdriveToken}` } };
     } else if (deepResearch) {
       endpoint = `${API}/api/deep-research?q=${encodeURIComponent(q)}&rounds=3`;
     } else {
@@ -182,7 +230,6 @@ export default function Home() {
       const resp = await fetch(endpoint, fetchOptions);
       const reader = resp.body!.getReader();
       const decoder = new TextDecoder();
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -200,28 +247,22 @@ export default function Home() {
         }
       }
     } catch {
-      setAnswer("Search failed — is the QUAERYX API running?\n\ncd apps/api && uvicorn main:app --reload");
+      setAnswer("Search failed — is the QUAERYX API running?");
     } finally {
       setLoading(false);
     }
-  }, [mode, deepResearch, selectedModel, uploadedFile]);
+  }, [mode, deepResearch, selectedModel, uploadedFile, connector, connectorInput, gdriveToken]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     runSearch(query, mode);
   };
 
-  // ── Voice search ──
+  // Voice
   const startVoice = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      alert("Voice search requires Chrome or Edge.");
-      return;
-    }
-    if (isListening) {
-      recognitionRef.current?.stop();
-      return;
-    }
+    if (!SR) { alert("Voice search requires Chrome or Edge."); return; }
+    if (isListening) { recognitionRef.current?.stop(); return; }
     const rec = new SR();
     rec.continuous = false;
     rec.interimResults = false;
@@ -230,42 +271,58 @@ export default function Home() {
     rec.onend    = () => setIsListening(false);
     rec.onerror  = () => setIsListening(false);
     rec.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setQuery(transcript);
-      setTimeout(() => runSearch(transcript, mode), 200);
+      const t = event.results[0][0].transcript;
+      setQuery(t);
+      setTimeout(() => runSearch(t, mode), 200);
     };
     recognitionRef.current = rec;
     rec.start();
   };
 
-  // ── File upload ──
+  // File upload
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
     setUploadedFile(file);
-    setAnswer("");
-    setResults([]);
-    setDocInfo(null);
+    setConnector(null);
+    setAnswer(""); setResults([]); setDocInfo(null);
   };
-
   const clearFile = () => {
-    setUploadedFile(null);
-    setDocInfo(null);
+    setUploadedFile(null); setDocInfo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // ── Share ──
+  // Share
   const handleShare = () => {
     const url = new URL(window.location.href.split("?")[0]);
     url.searchParams.set("q", query);
     url.searchParams.set("mode", mode);
     navigator.clipboard.writeText(url.toString()).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopied(true); setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  // Google Drive OAuth
+  const connectGDrive = async () => {
+    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    try {
+      const res = await fetch(`${API}/api/gdrive/auth-url`);
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+      const popup = window.open(data.auth_url, "gdrive_auth", "width=500,height=600");
+      if (!popup) alert("Please allow popups for this site to connect Google Drive.");
+    } catch {
+      alert("Could not reach QUAERYX API.");
+    }
+  };
+
+  const clearConnector = () => {
+    setConnector(null); setConnectorInput("");
+    setAnswer(""); setResults([]); setDocInfo(null);
   };
 
   const hasResults = results.length > 0 || !!answer;
   const selectedModelInfo = GROQ_MODELS.find((m) => m.id === selectedModel) ?? GROQ_MODELS[0];
+  const isConnectorMode = !!uploadedFile || (connector !== null);
 
   return (
     <div
@@ -296,20 +353,12 @@ export default function Home() {
             <button
               onClick={handleShare}
               className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
-              title="Copy shareable link"
             >
-              {copied ? (
-                <><span>✓</span> Copied!</>
-              ) : (
-                <><span>↗</span> Share</>
-              )}
+              {copied ? <><span>✓</span> Copied!</> : <><span>↗</span> Share</>}
             </button>
           )}
-          <a
-            href="https://github.com/Vinseek91/quaeryx"
-            target="_blank"
-            className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
-          >
+          <a href="https://github.com/Vinseek91/quaeryx" target="_blank"
+            className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5">
             <span>★</span> GitHub
           </a>
         </div>
@@ -356,60 +405,80 @@ export default function Home() {
         {/* ── SEARCH FORM ── */}
         <form onSubmit={handleSearch} className="mb-8">
 
-          {/* File badge */}
-          {uploadedFile && (
-            <div className="flex items-center gap-2 mb-3">
-              <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 text-teal-700 text-xs px-3 py-1.5 rounded-xl font-medium">
-                <span>📄</span>
-                <span className="max-w-[200px] truncate">{uploadedFile.name}</span>
-                <span className="text-teal-400">·</span>
-                <span className="text-teal-500">{(uploadedFile.size / 1024).toFixed(0)} KB</span>
-                <button
-                  type="button"
-                  onClick={clearFile}
-                  className="ml-1 text-teal-400 hover:text-teal-700 transition-colors font-bold"
-                >×</button>
-              </div>
-              <span className="text-[10px] text-gray-400 font-medium tracking-wide">Ask anything about this file</span>
+          {/* Active connector badge */}
+          {(uploadedFile || (connector && connector !== null)) && (
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              {uploadedFile && (
+                <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 text-teal-700 text-xs px-3 py-1.5 rounded-xl font-medium">
+                  <span>📄</span>
+                  <span className="max-w-[180px] truncate">{uploadedFile.name}</span>
+                  <span className="text-teal-400">·</span>
+                  <span>{(uploadedFile.size / 1024).toFixed(0)} KB</span>
+                  <button type="button" onClick={clearFile} className="ml-1 text-teal-400 hover:text-teal-700 font-bold">×</button>
+                </div>
+              )}
+              {connector === "url" && (
+                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 text-xs px-3 py-1.5 rounded-xl font-medium">
+                  <span>🔗</span>
+                  <span className="max-w-[220px] truncate">{connectorInput}</span>
+                  <button type="button" onClick={clearConnector} className="ml-1 text-blue-400 hover:text-blue-700 font-bold">×</button>
+                </div>
+              )}
+              {connector === "youtube" && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-1.5 rounded-xl font-medium">
+                  <span>▶</span>
+                  <span className="max-w-[220px] truncate">{connectorInput}</span>
+                  <button type="button" onClick={clearConnector} className="ml-1 text-red-400 hover:text-red-700 font-bold">×</button>
+                </div>
+              )}
+              {connector === "gdrive" && gdriveToken && (
+                <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs px-3 py-1.5 rounded-xl font-medium">
+                  <span>🟢</span>
+                  <span>Google Drive connected</span>
+                  <button type="button" onClick={() => { setGdriveToken(null); setConnector(null); localStorage.removeItem("gdrive_token"); }} className="ml-1 text-green-400 hover:text-green-700 font-bold">×</button>
+                </div>
+              )}
+              {isConnectorMode && (
+                <span className="text-[10px] text-gray-400 font-medium">Ask anything about this source</span>
+              )}
             </div>
           )}
 
-          {/* Search input row */}
+          {/* Search input */}
           <div className="flex gap-2.5 mb-4">
             <div className="flex-1 relative flex items-center">
               <input
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={uploadedFile ? "Ask a question about the file..." : "Search anything — web, academic, code, news..."}
+                onChange={(e) => handleQueryChange(e.target.value)}
+                placeholder={
+                  uploadedFile     ? "Ask a question about the file..." :
+                  connector === "youtube" ? "Ask about this video..." :
+                  connector === "url"     ? "Ask about this page..." :
+                  connector === "gdrive"  ? "Search your Google Drive..." :
+                  "Search anything — or paste a URL / YouTube link..."
+                }
                 className="w-full bg-white border border-gray-200 rounded-2xl pl-5 pr-20 py-4 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-50 transition-all placeholder:text-gray-400 text-gray-800 shadow-sm hover:shadow-md hover:border-gray-300"
                 autoFocus
               />
-              {/* Inline icon buttons inside input */}
               <div className="absolute right-3 flex items-center gap-1">
-                {/* File upload button */}
+                {/* File upload */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className={`p-1.5 rounded-lg transition-all ${uploadedFile ? "text-teal-500 bg-teal-50" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"}`}
-                  title="Upload a file (PDF, TXT)"
+                  title="Upload file (PDF, TXT)"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                   </svg>
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.txt,.md,.csv"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                {/* Voice button */}
+                <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.csv" className="hidden" onChange={handleFileChange} />
+                {/* Voice */}
                 <button
                   type="button"
                   onClick={startVoice}
                   className={`p-1.5 rounded-lg transition-all ${isListening ? "text-red-500 bg-red-50 animate-pulse" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"}`}
-                  title={isListening ? "Listening... (click to stop)" : "Voice search"}
+                  title={isListening ? "Listening..." : "Voice search"}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -420,7 +489,6 @@ export default function Home() {
                 </button>
               </div>
             </div>
-
             <button
               type="submit"
               disabled={loading}
@@ -436,7 +504,102 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Mode tabs + deep research + model selector */}
+          {/* Connector row */}
+          <div className="flex gap-2 flex-wrap items-center mb-3">
+            <span className="text-[10px] text-gray-400 font-semibold tracking-widest uppercase">Connectors</span>
+            {/* URL */}
+            <button
+              type="button"
+              onClick={() => { setConnector(connector === "url" ? null : "url"); setConnectorInput(""); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                connector === "url"
+                  ? "border-blue-400 bg-blue-50 text-blue-700 shadow-sm"
+                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
+              }`}
+            >
+              🔗 URL
+            </button>
+            {/* YouTube */}
+            <button
+              type="button"
+              onClick={() => { setConnector(connector === "youtube" ? null : "youtube"); setConnectorInput(""); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                connector === "youtube"
+                  ? "border-red-400 bg-red-50 text-red-700 shadow-sm"
+                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
+              }`}
+            >
+              ▶ YouTube
+            </button>
+            {/* Google Drive */}
+            <button
+              type="button"
+              onClick={gdriveToken ? () => setConnector("gdrive") : connectGDrive}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                connector === "gdrive"
+                  ? "border-green-400 bg-green-50 text-green-700 shadow-sm"
+                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
+              }`}
+            >
+              🟢 {gdriveToken ? "Google Drive" : "Connect Drive"}
+            </button>
+
+            <div className="flex-1" />
+
+            {/* Model selector */}
+            <div className="relative" data-model-menu>
+              <button
+                type="button"
+                onClick={() => setShowModelMenu((v) => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm transition-all"
+              >
+                <span className="text-teal-500">◉</span>
+                <span>{selectedModelInfo.label}</span>
+                <span className="text-gray-300">▾</span>
+              </button>
+              {showModelMenu && (
+                <div className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-gray-500 tracking-widest uppercase">AI Model</span>
+                    <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-lg">ALL FREE</span>
+                  </div>
+                  {GROQ_MODELS.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => { setSelectedModel(m.id); setShowModelMenu(false); }}
+                      className={`w-full text-left px-4 py-3 text-sm transition-colors flex items-center justify-between ${
+                        selectedModel === m.id ? "bg-teal-50 text-teal-700" : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <div>
+                        <div className="font-semibold text-[13px]">{m.label}</div>
+                        <div className="text-[11px] text-gray-400">{m.desc}</div>
+                      </div>
+                      {selectedModel === m.id && <span className="text-teal-500 font-bold">✓</span>}
+                    </button>
+                  ))}
+                  <div className="px-4 py-2 border-t border-gray-100 text-[10px] text-gray-400 text-center">
+                    Powered by Groq · No paywalls · No lock icons
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Connector URL input */}
+          {(connector === "url" || connector === "youtube") && (
+            <div className="flex gap-2 mb-3">
+              <input
+                value={connectorInput}
+                onChange={(e) => setConnectorInput(e.target.value)}
+                placeholder={connector === "youtube" ? "Paste YouTube URL..." : "Paste any webpage URL..."}
+                className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-50 transition-all placeholder:text-gray-400 text-gray-800 shadow-sm"
+              />
+            </div>
+          )}
+
+          {/* Mode tabs */}
           <div className="flex gap-2 flex-wrap items-center">
             {MODES.map((m) => (
               <button
@@ -463,71 +626,22 @@ export default function Home() {
             >
               ◈ Deep Research
             </button>
-
-            {/* Model selector — all FREE, no lock icons */}
-            <div className="relative ml-auto" data-model-menu>
-              <button
-                type="button"
-                onClick={() => setShowModelMenu((v) => !v)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm transition-all bg-transparent"
-                title="Select AI model — all free"
-              >
-                <span className="text-teal-500">◉</span>
-                <span>{selectedModelInfo.label}</span>
-                <span className="text-gray-300">▾</span>
-              </button>
-              {showModelMenu && (
-                <div className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-gray-500 tracking-widest uppercase">AI Model</span>
-                    <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-lg">ALL FREE</span>
-                  </div>
-                  {GROQ_MODELS.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => { setSelectedModel(m.id); setShowModelMenu(false); }}
-                      className={`w-full text-left px-4 py-3 text-sm transition-colors flex items-center justify-between group ${
-                        selectedModel === m.id
-                          ? "bg-teal-50 text-teal-700"
-                          : "text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      <div>
-                        <div className="font-semibold text-[13px]">{m.label}</div>
-                        <div className="text-[11px] text-gray-400">{m.desc}</div>
-                      </div>
-                      {selectedModel === m.id && (
-                        <span className="text-teal-500 font-bold">✓</span>
-                      )}
-                    </button>
-                  ))}
-                  <div className="px-4 py-2 border-t border-gray-100 text-[10px] text-gray-400 text-center">
-                    Powered by Groq · No paywalls · No lock icons
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         </form>
 
-        {/* ── LISTENING INDICATOR ── */}
+        {/* ── STATUS INDICATORS ── */}
         {isListening && (
           <div className="mb-5 text-xs text-red-500 tracking-wider font-medium flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/>
             Listening... speak your query
           </div>
         )}
-
-        {/* ── RESEARCH ROUND ── */}
         {deepResearch && round > 0 && (
           <div className="mb-5 text-xs text-purple-600 tracking-wider font-medium flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"/>
             Research round {round} / 3 in progress...
           </div>
         )}
-
-        {/* ── DOC INFO ── */}
         {docInfo && (
           <div className="mb-4 text-xs text-teal-600 flex items-center gap-2 font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-teal-500"/>
@@ -536,7 +650,7 @@ export default function Home() {
         )}
 
         {/* ── SKELETON LOADERS ── */}
-        {loading && results.length === 0 && !uploadedFile && (
+        {loading && results.length === 0 && !isConnectorMode && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
             {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
           </div>
@@ -552,14 +666,12 @@ export default function Home() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="border border-gray-200 rounded-2xl p-4 hover:border-gray-300 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 block group bg-white shadow-sm"
-                style={{ animationDelay: `${i * 50}ms` }}
               >
                 <div className="flex items-center gap-2 mb-2.5">
                   <img
                     src={getFavicon(r.url, r.source)}
                     alt={r.source}
-                    width={16}
-                    height={16}
+                    width={16} height={16}
                     className="rounded-sm opacity-80"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
@@ -567,9 +679,7 @@ export default function Home() {
                     {r.source.replace("_", " ")}
                   </span>
                   {r.appearances > 1 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-lg bg-teal-50 text-teal-600 font-semibold ml-auto">
-                      ×{r.appearances}
-                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-lg bg-teal-50 text-teal-600 font-semibold ml-auto">×{r.appearances}</span>
                   )}
                 </div>
                 <p className="text-sm text-gray-800 line-clamp-2 group-hover:text-gray-900 transition-colors font-semibold leading-snug mb-1.5">{r.title}</p>
@@ -580,16 +690,17 @@ export default function Home() {
         )}
 
         {/* ── ANSWER ── */}
-        {(answer || (loading && (results.length > 0 || !!uploadedFile))) && (
+        {(answer || (loading && (results.length > 0 || isConnectorMode))) && (
           <div className="border border-gray-200 rounded-2xl p-6 mb-6 bg-white shadow-sm">
             <div className="text-[10px] text-teal-600 mb-4 tracking-widest flex items-center gap-2 font-semibold uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"/>
-              {uploadedFile ? `QUAERYX DOCUMENT ANALYST · ${selectedModelInfo.label}` : `QUAERYX SYNTHESIS · ${results.length} SOURCES · ${selectedModelInfo.label}`}
+              {isConnectorMode
+                ? `QUAERYX ANALYST · ${selectedModelInfo.label}`
+                : `QUAERYX SYNTHESIS · ${results.length} SOURCES · ${selectedModelInfo.label}`}
             </div>
             <div
               ref={answerRef}
               className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-[65vh] overflow-y-auto"
-              style={{ fontFamily: "'Inter', system-ui, sans-serif" }}
             >
               {answer}
               {loading && <span className="animate-pulse text-teal-500 ml-0.5">▋</span>}

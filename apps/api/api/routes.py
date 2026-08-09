@@ -4,7 +4,8 @@ QUAERYX API Routes
 import asyncio
 import io
 import json
-from fastapi import APIRouter, File, Form, Query, UploadFile
+import re
+from fastapi import APIRouter, File, Form, Header, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
@@ -195,6 +196,159 @@ async def upload_and_ask(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(doc_stream(), media_type="text/event-stream")
+
+
+@router.post("/url")
+async def analyze_url(
+    url: str = Form(...),
+    question: str = Form(...),
+    model: str = Form("llama-3.3-70b-versatile"),
+):
+    """Scrape any URL and answer questions about its content."""
+    import httpx
+    from bs4 import BeautifulSoup
+
+    async def url_stream():
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+                resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; QUAERYX/1.0)"})
+                soup = BeautifulSoup(resp.text, "html.parser")
+                for tag in soup(["script", "style", "nav", "footer", "header", "aside", "iframe"]):
+                    tag.decompose()
+                text = soup.get_text(separator="\n", strip=True)
+                title_tag = soup.find("title")
+                title = title_tag.get_text(strip=True) if title_tag else url
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Could not fetch URL: {e}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        if not text.strip():
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': 'No readable content found at this URL.'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        yield f"data: {json.dumps({'type': 'doc_info', 'data': {'filename': title, 'chars': len(text)}})}\n\n"
+        try:
+            async for chunk in reasoner.analyse_document(question, text, title, model=model, stream=True):
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Analysis failed: {e}'})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(url_stream(), media_type="text/event-stream")
+
+
+@router.post("/youtube")
+async def analyze_youtube(
+    url: str = Form(...),
+    question: str = Form(...),
+    model: str = Form("llama-3.3-70b-versatile"),
+):
+    """Fetch YouTube transcript and answer questions about the video."""
+    async def yt_stream():
+        match = re.search(r"(?:v=|youtu\.be/|shorts/)([a-zA-Z0-9_-]{11})", url)
+        if not match:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': 'Invalid YouTube URL — please paste a valid youtube.com or youtu.be link.'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        video_id = match.group(1)
+        try:
+            from youtube_transcript_api import YouTubeTranscriptApi
+            entries = YouTubeTranscriptApi.get_transcript(video_id)
+            transcript = " ".join(e["text"] for e in entries)
+            filename = f"YouTube · {video_id}"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'No transcript available for this video: {e}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        yield f"data: {json.dumps({'type': 'doc_info', 'data': {'filename': filename, 'chars': len(transcript)}})}\n\n"
+        try:
+            async for chunk in reasoner.analyse_document(question, transcript, filename, model=model, stream=True):
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Analysis failed: {e}'})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(yt_stream(), media_type="text/event-stream")
+
+
+@router.get("/gdrive/auth-url")
+async def gdrive_auth_url():
+    """Return the Google OAuth URL for the frontend to redirect to."""
+    if not settings.GOOGLE_CLIENT_ID:
+        return {"error": "Google Drive not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your environment."}
+    from google_auth_oauthlib.flow import Flow
+    flow = Flow.from_client_config(
+        {"web": {
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }},
+        scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        redirect_uri=settings.GOOGLE_REDIRECT_URI,
+    )
+    auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline")
+    return {"auth_url": auth_url}
+
+
+@router.post("/gdrive/search")
+async def gdrive_search(
+    q: str = Form(...),
+    question: str = Form(...),
+    model: str = Form("llama-3.3-70b-versatile"),
+    authorization: str = Header(...),
+):
+    """Search Google Drive files and answer questions using the user's access token."""
+    access_token = authorization.replace("Bearer ", "")
+
+    async def drive_stream():
+        try:
+            from googleapiclient.discovery import build
+            from google.oauth2.credentials import Credentials
+            creds = Credentials(token=access_token)
+            service = build("drive", "v3", credentials=creds, cache_discovery=False)
+            results = service.files().list(
+                q=f"fullText contains '{q}' and trashed=false",
+                pageSize=5,
+                fields="files(id, name, mimeType)",
+            ).execute()
+            files = results.get("files", [])
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Google Drive error: {e}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        if not files:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': 'No files found in your Google Drive matching that query.'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        # Export first matching file as plain text
+        file = files[0]
+        yield f"data: {json.dumps({'type': 'doc_info', 'data': {'filename': file['name'], 'chars': 0}})}\n\n"
+        try:
+            if "google-apps" in file.get("mimeType", ""):
+                content = service.files().export(fileId=file["id"], mimeType="text/plain").execute()
+            else:
+                content = service.files().get_media(fileId=file["id"]).execute()
+            text = content.decode("utf-8", errors="ignore") if isinstance(content, bytes) else str(content)
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Could not read file: {e}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        try:
+            async for chunk in reasoner.analyse_document(question, text, file["name"], model=model, stream=True):
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Analysis failed: {e}'})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(drive_stream(), media_type="text/event-stream")
 
 
 @router.get("/models")

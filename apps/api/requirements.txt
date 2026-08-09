@@ -13,3 +13,6 @@ beautifulsoup4==4.12.3
 duckduckgo-search==5.3.1
 pypdf==4.3.1
 python-multipart==0.0.12
+youtube-transcript-api==0.6.2
+google-api-python-client==2.143.0
+google-auth-oauthlib==1.2.1

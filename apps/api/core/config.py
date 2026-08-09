@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     MIROFISH_ENABLED: bool = True
     MIROFISH_AGENTS: int = 500   # agents per simulation
 
+    # Google Drive connector
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_REDIRECT_URI: str = "http://localhost:3000/gdrive/callback"
+
     class Config:
         env_file = ".env"
 
