@@ -10,6 +10,8 @@ services:
         value: "3.11.9"
       - key: PYTHONPATH
         value: "/opt/render/project/src"
+      - key: GROQ_API_KEY
+        value: "sk_T8G1Nbiv44HnzNs2FcE4WGdyb3FYwWrezvpvDESKrvgyfML2cRRP"
       - key: BRAVE_API_KEY
         sync: false
       - key: TAVILY_API_KEY

@@ -1,6 +1,7 @@
 """
-QUAERO Reasoning Engine
+QUAERYX Reasoning Engine
 Multi-agent synthesis with OmniRoute model routing.
+Falls back to Groq (free) when OmniRoute is unavailable.
 """
 import asyncio
 from openai import AsyncOpenAI
@@ -10,11 +11,16 @@ from core.config import settings
 
 class ReasoningEngine:
     def __init__(self):
-        # Points to OmniRoute — routes to cheapest capable model per task
+        # Primary: OmniRoute (local) or configured base URL
         self.client = AsyncOpenAI(
             base_url=settings.OPENAI_BASE_URL,
             api_key=settings.OPENAI_API_KEY,
         )
+        # Fallback: Groq free API
+        self.groq_client = AsyncOpenAI(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=settings.GROQ_API_KEY,
+        ) if settings.GROQ_API_KEY else None
 
     async def synthesise(
         self,
@@ -24,7 +30,6 @@ class ReasoningEngine:
         mode: str = "general",
     ):
         """Synthesise search results into a cited, reasoned answer."""
-
         context = self._format_results(results)
         system = self._system_prompt(mode)
         user = f"""Query: {query}
@@ -37,41 +42,69 @@ End with 3 follow-up research questions."""
 
         model = self._select_model(mode, len(results))
 
-        if stream:
-            async for chunk in await self.client.chat.completions.create(
-                model=model,
-                messages=[{"role": "system", "content": system},
-                          {"role": "user", "content": user}],
-                stream=True,
-                temperature=0.3,
-            ):
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
-        else:
-            resp = await self.client.chat.completions.create(
-                model=model,
-                messages=[{"role": "system", "content": system},
-                          {"role": "user", "content": user}],
-                temperature=0.3,
-            )
-            yield resp.choices[0].message.content
+        # Try primary client first, fall back to Groq
+        client, groq_model = self.client, "llama-3.3-70b-versatile"
+        try:
+            if stream:
+                async for chunk in await client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "system", "content": system},
+                              {"role": "user", "content": user}],
+                    stream=True,
+                    temperature=0.3,
+                ):
+                    if chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+            else:
+                resp = await client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "system", "content": system},
+                              {"role": "user", "content": user}],
+                    temperature=0.3,
+                )
+                yield resp.choices[0].message.content
+        except Exception as e:
+            logger.warning(f"Primary LLM failed: {e} — trying Groq fallback")
+            if self.groq_client:
+                if stream:
+                    async for chunk in await self.groq_client.chat.completions.create(
+                        model=groq_model,
+                        messages=[{"role": "system", "content": system},
+                                  {"role": "user", "content": user}],
+                        stream=True,
+                        temperature=0.3,
+                    ):
+                        if chunk.choices[0].delta.content:
+                            yield chunk.choices[0].delta.content
+                else:
+                    resp = await self.groq_client.chat.completions.create(
+                        model=groq_model,
+                        messages=[{"role": "system", "content": system},
+                                  {"role": "user", "content": user}],
+                        temperature=0.3,
+                    )
+                    yield resp.choices[0].message.content
+            else:
+                raise
 
     async def classify_intent(self, query: str) -> dict:
         """Classify query intent to route to right search providers."""
-        resp = await self.client.chat.completions.create(
-            model="gemini-1.5-flash",   # cheap + fast for classification
-            messages=[{
-                "role": "user",
-                "content": f"""Classify this search query into one category.
+        client = self.groq_client or self.client
+        model = "llama-3.3-70b-versatile" if self.groq_client else "gemini-1.5-flash"
+        try:
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=[{
+                    "role": "user",
+                    "content": f"""Classify this search query into one category.
 Query: "{query}"
 Categories: general | academic | code | news | prediction | factual
-Return JSON only: {{"mode": "...", "is_controversial": bool, "needs_prediction": bool}}"""
-            }],
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-        import json
-        try:
+Return JSON only: {{"mode": "...", "is_controversial": false, "needs_prediction": false}}"""
+                }],
+                temperature=0,
+                response_format={"type": "json_object"},
+            )
+            import json
             return json.loads(resp.choices[0].message.content)
         except Exception:
             return {"mode": "general", "is_controversial": False, "needs_prediction": False}
@@ -79,8 +112,8 @@ Return JSON only: {{"mode": "...", "is_controversial": bool, "needs_prediction":
     def _select_model(self, mode: str, result_count: int) -> str:
         """Route to cheapest model that can handle the task."""
         if mode in ("academic", "code") or result_count > 15:
-            return "claude-sonnet-4-6"      # complex synthesis
-        return "gemini-1.5-flash"           # fast + free for general
+            return "claude-sonnet-4-6"
+        return "gemini-1.5-flash"
 
     def _format_results(self, results: list[dict]) -> str:
         lines = []
@@ -89,7 +122,7 @@ Return JSON only: {{"mode": "...", "is_controversial": bool, "needs_prediction":
         return "\n".join(lines)
 
     def _system_prompt(self, mode: str) -> str:
-        base = """You are QUAERO, the world's most intelligent search engine.
+        base = """You are QUAERYX, the world's most intelligent search engine.
 Your answers are comprehensive, accurate, and always cite sources.
 You synthesise information from multiple sources into a clear, structured answer.
 You acknowledge when sources conflict and explain why."""

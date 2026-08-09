@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str = "http://localhost:20128/v1"
     OPENAI_API_KEY: str = "omniroute"
 
+    # Groq free API fallback (when OmniRoute unavailable)
+    GROQ_API_KEY: Optional[str] = None
+
     # Search providers (all have free tiers)
     BRAVE_API_KEY: Optional[str] = None
     TAVILY_API_KEY: Optional[str] = None
