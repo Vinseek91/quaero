@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QUAERYX</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 380px;
+      min-height: 120px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      background: #f8f9fc;
+      color: #1f2937;
+    }
+
+    header {
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo { display: flex; align-items: center; gap: 8px; }
+    .logo-text { font-weight: 800; font-size: 14px; letter-spacing: 0.15em; color: #111827; }
+    .tagline { font-size: 10px; color: #9ca3af; margin-left: auto; }
+
+    .search-area { padding: 12px; }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    input {
+      flex: 1;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 9px 14px;
+      font-size: 13px;
+      outline: none;
+      background: white;
+      color: #1f2937;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: #3fe0a8; box-shadow: 0 0 0 3px rgba(63,224,168,0.1); }
+    input::placeholder { color: #9ca3af; }
+
+    button.search-btn {
+      background: linear-gradient(135deg, #4285F4, #3fe0a8);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 9px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+    button.search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+    button.search-btn:disabled { opacity: 0.6; cursor: default; transform: none; }
+
+    .modes {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .mode-btn {
+      font-size: 11px;
+      padding: 4px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: transparent;
+      color: #6b7280;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-btn.active {
+      border-color: #3fe0a8;
+      background: #f0fdf9;
+      color: #0d9488;
+    }
+    .mode-btn:hover:not(.active) { border-color: #d1d5db; background: white; }
+
+    .result-area {
+      padding: 0 12px 12px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .answer-box {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #374151;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .answer-label {
+      font-size: 10px;
+      color: #3fe0a8;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: #3fe0a8; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .open-btn {
+      display: block;
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 11.5px;
+      color: #6b7280;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .open-btn:hover { background: #f0fdf9; border-color: #3fe0a8; color: #0d9488; }
+
+    .cursor { animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <svg width="22" height="22" viewBox="0 0 44 44" fill="none">
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#4285F4"/>
+            <stop offset="50%" stop-color="#3fe0a8"/>
+            <stop offset="100%" stop-color="#FBBC05"/>
+          </linearGradient>
+        </defs>
+        <circle cx="19" cy="19" r="13" fill="url(#g)" opacity="0.12"/>
+        <circle cx="19" cy="19" r="13" fill="none" stroke="url(#g)" stroke-width="3.5"/>
+        <line x1="27" y1="27" x2="38" y2="38" stroke="url(#g)" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="19" cy="19" r="4" fill="url(#g)"/>
+      </svg>
+      <span class="logo-text">QUAERYX</span>
+    </div>
+    <span class="tagline">FREE AI SEARCH</span>
+  </header>
+
+  <div class="search-area">
+    <div class="input-row">
+      <input id="query" type="text" placeholder="Search anything..." autofocus />
+      <button class="search-btn" id="searchBtn">Search</button>
+    </div>
+    <div class="modes">
+      <button class="mode-btn active" data-mode="general">⬡ General</button>
+      <button class="mode-btn" data-mode="academic">◈ Academic</button>
+      <button class="mode-btn" data-mode="code">&lt;/&gt; Code</button>
+      <button class="mode-btn" data-mode="news">◉ News</button>
+    </div>
+  </div>
+
+  <div class="result-area" id="resultArea" style="display:none">
+    <div class="answer-box">
+      <div class="answer-label"><span class="dot"></span> QUAERYX ANSWER</div>
+      <div id="answerText"></div>
+    </div>
+    <button class="open-btn" id="openBtn">Open full results in QUAERYX ↗</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

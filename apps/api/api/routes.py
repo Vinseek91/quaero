@@ -5,9 +5,30 @@ import asyncio
 import io
 import json
 import re
+import time
 from fastapi import APIRouter, File, Form, Header, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from loguru import logger
+
+# ── Simple TTL cache ───────────────────────────────────────────────────────
+_cache: dict[str, tuple[float, any]] = {}
+_CACHE_TTL = 300  # 5 minutes
+
+def _cache_get(key: str):
+    if key in _cache:
+        ts, val = _cache[key]
+        if time.time() - ts < _CACHE_TTL:
+            return val
+        del _cache[key]
+    return None
+
+def _cache_set(key: str, val: any):
+    _cache[key] = (time.time(), val)
+    # Keep cache size bounded
+    if len(_cache) > 500:
+        oldest = sorted(_cache.items(), key=lambda x: x[1][0])[:100]
+        for k, _ in oldest:
+            del _cache[k]
 
 from core.config import settings
 from packages.search.aggregator import UniversalSearchAggregator
@@ -27,10 +48,19 @@ async def search(
     stream: bool = Query(True),
     predict: bool = Query(False, description="Enable MiroFish swarm prediction"),
     model: str = Query("llama-3.3-70b-versatile", description="Groq model to use for synthesis"),
+    comparison: bool = Query(False, description="Comparison mode — produces side-by-side table"),
 ):
     """
     QUAERYX unified search — 10+ sources, AI synthesis, optional swarm prediction.
     """
+    # 0. Detect language
+    detected_lang = "en"
+    try:
+        from langdetect import detect
+        detected_lang = detect(q)
+    except Exception:
+        pass
+
     # 1. Classify intent (graceful fallback)
     try:
         intent = await reasoner.classify_intent(q)
@@ -52,7 +82,7 @@ async def search(
 
             # Stream reasoning (graceful fallback if LLM unavailable)
             try:
-                async for chunk in reasoner.synthesise(q, results, stream=True, mode=effective_mode, model=model):
+                async for chunk in reasoner.synthesise(q, results, stream=True, mode=effective_mode, model=model, language=detected_lang, comparison=comparison):
                     yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
             except Exception as e:
                 logger.warning(f"Reasoning failed: {e}")
@@ -369,6 +399,9 @@ async def list_models():
 @router.get("/images")
 async def image_search(q: str = Query(..., description="Search query for images")):
     """Return relevant images from Wikipedia (free, no API key needed)."""
+    cached = _cache_get(f"img:{q}")
+    if cached is not None:
+        return cached
     import httpx
     images = []
     try:
@@ -400,12 +433,17 @@ async def image_search(q: str = Query(..., description="Search query for images"
                     })
     except Exception as e:
         logger.warning(f"Image search failed: {e}")
-    return {"images": images[:6]}
+    result = {"images": images[:6]}
+    _cache_set(f"img:{q}", result)
+    return result
 
 
 @router.get("/trending")
 async def trending():
     """Return live trending topics from HackerNews and Reddit."""
+    cached = _cache_get("trending")
+    if cached is not None:
+        return cached
     import httpx
     topics = []
 
@@ -457,7 +495,9 @@ async def trending():
             seen.add(key)
             unique.append(t)
 
-    return {"trending": unique[:12]}
+    result = {"trending": unique[:12]}
+    _cache_set("trending", result)
+    return result
 
 
 @router.get("/providers")

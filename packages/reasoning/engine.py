@@ -29,17 +29,37 @@ class ReasoningEngine:
         stream: bool = True,
         mode: str = "general",
         model: str | None = None,
+        language: str = "en",
+        comparison: bool = False,
     ):
         """Synthesise search results into a cited, reasoned answer."""
         context = self._format_results(results)
         system = self._system_prompt(mode)
-        user = f"""Query: {query}
+
+        # Language instruction
+        lang_note = "" if language == "en" else f"\nIMPORTANT: The user wrote in language code '{language}'. Respond in the same language throughout."
+
+        # Comparison mode instruction
+        if comparison:
+            user = f"""Query: {query}
+
+Search Results:
+{context}
+
+This is a COMPARISON query. Structure your response as:
+1. A brief intro paragraph
+2. A detailed markdown comparison table with relevant attributes as rows
+3. A verdict section — which is better and when
+4. Cite sources inline [source N]
+End with 3 follow-up research questions.{lang_note}"""
+        else:
+            user = f"""Query: {query}
 
 Search Results:
 {context}
 
 Provide a comprehensive, cited answer. For each key claim, cite [source N].
-End with 3 follow-up research questions."""
+End with 3 follow-up research questions.{lang_note}"""
 
         primary_model = self._select_model(mode, len(results))
         # User-selected Groq model overrides the fallback default

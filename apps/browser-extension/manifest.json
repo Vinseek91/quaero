@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "QUAERYX",
+  "version": "1.0.0",
+  "description": "Search 12+ sources with free AI — from any webpage. Select text and right-click to search instantly.",
+  "permissions": ["activeTab", "storage", "contextMenus", "clipboardRead"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "QUAERYX Search"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }]
+}

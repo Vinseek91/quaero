@@ -164,6 +164,20 @@ export default function Home() {
   // Export
   const [exported, setExported]         = useState(false);
 
+  // Comparison mode
+  const [isComparison, setIsComparison] = useState(false);
+
+  // Detected language
+  const [detectedLang, setDetectedLang] = useState("");
+
+  // Collections
+  const [collections, setCollections]   = useState<{ id: string; query: string; answer: string; mode: string; date: string }[]>([]);
+  const [showCollections, setShowCollections] = useState(false);
+
+  // Settings panel
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKeys, setApiKeys]           = useState({ brave: "", tavily: "", exa: "" });
+
   // Copy answer
   const [answerCopied, setAnswerCopied] = useState(false);
 
@@ -231,6 +245,10 @@ export default function Home() {
     try {
       const saved = localStorage.getItem(HISTORY_KEY);
       if (saved) setHistory(JSON.parse(saved));
+      const cols = localStorage.getItem("quaeryx_collections");
+      if (cols) setCollections(JSON.parse(cols));
+      const keys = localStorage.getItem("quaeryx_api_keys");
+      if (keys) setApiKeys(JSON.parse(keys));
     } catch {}
   }, []);
 
@@ -290,6 +308,7 @@ export default function Home() {
   // Auto-detect YouTube / URL when user pastes
   const handleQueryChange = (val: string) => {
     setQuery(val);
+    setIsComparison(/\bvs\.?\b|\bversus\b|\bcompare\b/i.test(val));
     if (isYouTubeUrl(val)) {
       setConnector("youtube");
       setConnectorInput(val);
@@ -366,7 +385,7 @@ export default function Home() {
     } else if (deepResearch) {
       endpoint = `${API}/api/deep-research?q=${encodeURIComponent(q)}&rounds=3`;
     } else {
-      endpoint = `${API}/api/search?q=${encodeURIComponent(q)}&mode=${m}&stream=true&predict=${m === "prediction"}&model=${selectedModel}`;
+      endpoint = `${API}/api/search?q=${encodeURIComponent(q)}&mode=${m}&stream=true&predict=${m === "prediction"}&model=${selectedModel}&comparison=${isComparison}`;
     }
 
     try {
@@ -430,6 +449,21 @@ export default function Home() {
       setAnswerCopied(true);
       setTimeout(() => setAnswerCopied(false), 2000);
     });
+  };
+
+  const saveToCollection = () => {
+    if (!answer || !query) return;
+    const item = { id: Date.now().toString(), query, answer: answer.slice(0, 500), mode, date: new Date().toLocaleDateString() };
+    setCollections((prev) => {
+      const next = [item, ...prev].slice(0, 50);
+      try { localStorage.setItem("quaeryx_collections", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const saveApiKeys = (keys: typeof apiKeys) => {
+    setApiKeys(keys);
+    try { localStorage.setItem("quaeryx_api_keys", JSON.stringify(keys)); } catch {}
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -541,6 +575,18 @@ export default function Home() {
               </button>
             </>
           )}
+          {/* Collections */}
+          <button onClick={() => setShowCollections(true)}
+            className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
+            title="Saved searches">
+            ◈ {collections.length > 0 && <span className="bg-teal-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">{collections.length}</span>}
+          </button>
+          {/* Settings */}
+          <button onClick={() => setShowSettings(true)}
+            className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 w-8 h-8 rounded-lg hover:shadow-sm flex items-center justify-center"
+            title="API key settings">
+            ⚙
+          </button>
           {/* Dark mode toggle */}
           <button onClick={toggleDark}
             className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 w-8 h-8 rounded-lg hover:shadow-sm flex items-center justify-center"
@@ -968,11 +1014,24 @@ export default function Home() {
                   : `QUAERYX SYNTHESIS · ${results.length} SOURCES · ${selectedModelInfo.label}`}
               </div>
               {answer && !loading && (
-                <button onClick={copyAnswer}
-                  className="text-[11px] text-gray-400 hover:text-gray-700 border border-gray-200 hover:border-gray-400 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 hover:shadow-sm"
-                  title="Copy answer">
-                  {answerCopied ? "✓ Copied" : "⎘ Copy"}
-                </button>
+                <div className="flex items-center gap-2">
+                  {detectedLang && detectedLang !== "en" && (
+                    <span className="text-[10px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-lg font-semibold uppercase">{detectedLang}</span>
+                  )}
+                  {isComparison && (
+                    <span className="text-[10px] bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-lg font-semibold">⇄ Comparison</span>
+                  )}
+                  <button onClick={saveToCollection}
+                    className="text-[11px] text-gray-400 hover:text-teal-600 border border-gray-200 hover:border-teal-400 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 hover:shadow-sm"
+                    title="Save to collection">
+                    + Save
+                  </button>
+                  <button onClick={copyAnswer}
+                    className="text-[11px] text-gray-400 hover:text-gray-700 border border-gray-200 hover:border-gray-400 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 hover:shadow-sm"
+                    title="Copy answer">
+                    {answerCopied ? "✓ Copied" : "⎘ Copy"}
+                  </button>
+                </div>
               )}
             </div>
             <div
@@ -1081,6 +1140,88 @@ export default function Home() {
         )}
 
       </main>
+
+      {/* ── COLLECTIONS MODAL ── */}
+      {showCollections && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={() => setShowCollections(false)}>
+          <div className="bg-white dark:bg-[#1a1d27] rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-[#2a2d3a] flex items-center justify-between">
+              <span className="font-bold text-gray-900 dark:text-white text-sm">Saved Searches</span>
+              <div className="flex items-center gap-3">
+                {collections.length > 0 && (
+                  <button onClick={() => { setCollections([]); localStorage.removeItem("quaeryx_collections"); }}
+                    className="text-[11px] text-gray-400 hover:text-red-500 transition-colors">Clear all</button>
+                )}
+                <button onClick={() => setShowCollections(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {collections.length === 0 ? (
+                <div className="px-6 py-12 text-center text-gray-400 text-sm">
+                  No saved searches yet.<br/>Click "+ Save" after any search to save it here.
+                </div>
+              ) : (
+                collections.map((c) => (
+                  <button key={c.id}
+                    onClick={() => { setQuery(c.query); setShowCollections(false); runSearch(c.query, c.mode as SearchMode); }}
+                    className="w-full text-left px-6 py-4 border-b border-gray-50 dark:border-[#2a2d3a] hover:bg-gray-50 dark:hover:bg-[#2a2d3a] transition-colors">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate flex-1">{c.query}</span>
+                      <span className="text-[10px] text-gray-400 flex-shrink-0">{c.date}</span>
+                    </div>
+                    <p className="text-[11px] text-gray-400 line-clamp-2">{c.answer}</p>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SETTINGS MODAL ── */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={() => setShowSettings(false)}>
+          <div className="bg-white dark:bg-[#1a1d27] rounded-2xl shadow-2xl w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-[#2a2d3a] flex items-center justify-between">
+              <span className="font-bold text-gray-900 dark:text-white text-sm">⚙ Settings — API Keys</span>
+              <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                QUAERYX works without any API keys. Add these to get more search results.
+              </p>
+              {[
+                { key: "brave",  label: "Brave Search API Key",  link: "https://brave.com/search/api/",  free: "2,000/month" },
+                { key: "tavily", label: "Tavily API Key",         link: "https://tavily.com",              free: "1,000/month" },
+                { key: "exa",    label: "Exa API Key",            link: "https://exa.ai",                  free: "1,000/month" },
+              ].map(({ key, label, link, free }) => (
+                <div key={key}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">{label}</label>
+                    <a href={link} target="_blank" className="text-[10px] text-teal-600 hover:text-teal-800 transition-colors">
+                      Free {free} ↗
+                    </a>
+                  </div>
+                  <input
+                    type="password"
+                    value={apiKeys[key as keyof typeof apiKeys]}
+                    onChange={(e) => saveApiKeys({ ...apiKeys, [key]: e.target.value })}
+                    placeholder={`Enter ${label}...`}
+                    className="w-full bg-gray-50 dark:bg-[#0f1117] border border-gray-200 dark:border-[#2a2d3a] rounded-xl px-3 py-2 text-xs font-mono text-gray-800 dark:text-gray-200 outline-none focus:border-teal-400 transition-colors"
+                  />
+                </div>
+              ))}
+              <div className="pt-2 border-t border-gray-100 dark:border-[#2a2d3a] text-[10px] text-gray-400 text-center">
+                Keys saved locally in your browser — never sent to any server except the search API
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── FOOTER ── */}
       <footer className="fixed bottom-0 left-0 right-0 border-t border-gray-200/80 dark:border-[#2a2d3a]/80 bg-white/80 dark:bg-[#1a1d27]/80 backdrop-blur-md px-4 sm:px-6 py-2.5 flex justify-between items-center text-[10px] text-gray-400 font-medium">
