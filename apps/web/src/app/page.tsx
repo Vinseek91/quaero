@@ -323,16 +323,15 @@ export default function Home() {
     setDocInfo(null);
     setFollowUps([]);
 
-    // Fetch images in parallel (non-blocking)
     const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+    // Fetch images in parallel (non-blocking)
     if (!uploadedFile && connector === null) {
       fetch(`${API}/api/images?q=${encodeURIComponent(q)}`)
         .then((r) => r.json())
         .then((d) => setImages(d.images || []))
         .catch(() => {});
     }
-
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     let endpoint = "";
     let fetchOptions: RequestInit = {};
 
