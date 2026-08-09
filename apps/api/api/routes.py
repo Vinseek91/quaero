@@ -366,6 +366,43 @@ async def list_models():
     }
 
 
+@router.get("/images")
+async def image_search(q: str = Query(..., description="Search query for images")):
+    """Return relevant images from Wikipedia (free, no API key needed)."""
+    import httpx
+    images = []
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.get(
+                "https://en.wikipedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "generator": "search",
+                    "gsrsearch": q,
+                    "gsrlimit": 8,
+                    "prop": "pageimages|info",
+                    "pithumbsize": 400,
+                    "inprop": "url",
+                    "format": "json",
+                    "origin": "*",
+                },
+            )
+            pages = resp.json().get("query", {}).get("pages", {})
+            for page in pages.values():
+                thumb = page.get("thumbnail")
+                if thumb and thumb.get("source"):
+                    images.append({
+                        "url": thumb["source"],
+                        "title": page.get("title", ""),
+                        "page_url": page.get("fullurl", ""),
+                        "width": thumb.get("width", 0),
+                        "height": thumb.get("height", 0),
+                    })
+    except Exception as e:
+        logger.warning(f"Image search failed: {e}")
+    return {"images": images[:6]}
+
+
 @router.get("/trending")
 async def trending():
     """Return live trending topics from HackerNews and Reddit."""

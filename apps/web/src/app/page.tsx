@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneLight, oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 const HISTORY_KEY = "quaeryx_history";
 
@@ -145,6 +147,9 @@ export default function Home() {
   const [connectorInput, setConnectorInput] = useState(""); // URL or YT link
   const [gdriveToken, setGdriveToken]   = useState<string | null>(null);
   const [docInfo, setDocInfo]           = useState<{ filename: string; chars: number } | null>(null);
+
+  // Image results
+  const [images, setImages]             = useState<{ url: string; title: string; page_url: string }[]>([]);
 
   // Follow-up questions
   const [followUps, setFollowUps]       = useState<string[]>([]);
@@ -312,10 +317,20 @@ export default function Home() {
     setLoading(true);
     setAnswer("");
     setResults([]);
+    setImages([]);
     setPrediction(null);
     setRound(0);
     setDocInfo(null);
     setFollowUps([]);
+
+    // Fetch images in parallel (non-blocking)
+    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    if (!uploadedFile && connector === null) {
+      fetch(`${API}/api/images?q=${encodeURIComponent(q)}`)
+        .then((r) => r.json())
+        .then((d) => setImages(d.images || []))
+        .catch(() => {});
+    }
 
     const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     let endpoint = "";
@@ -540,7 +555,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-10 pb-24">
+      <main className="max-w-3xl mx-auto px-3 sm:px-4 py-8 sm:py-10 pb-24">
 
         {/* ── HERO ── */}
         {!hasResults && !loading && (
@@ -728,8 +743,8 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Connector row */}
-          <div className="flex gap-2 flex-wrap items-center mb-3">
+          {/* Connector row — scrollable on mobile */}
+          <div className="flex gap-2 items-center mb-3 overflow-x-auto pb-1 scrollbar-hide">
             <span className="text-[10px] text-gray-400 font-semibold tracking-widest uppercase">Connectors</span>
             {/* URL */}
             <button
@@ -921,6 +936,28 @@ export default function Home() {
           </div>
         )}
 
+        {/* ── IMAGE RESULTS ── */}
+        {images.length > 0 && (
+          <div className="mb-6">
+            <div className="text-[10px] text-gray-400 tracking-widest font-semibold uppercase mb-3">Images</div>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {images.map((img, i) => (
+                <a key={i} href={img.page_url} target="_blank" rel="noopener noreferrer"
+                  className="flex-shrink-0 group relative overflow-hidden rounded-xl border border-gray-200 dark:border-[#2a2d3a] hover:border-gray-300 dark:hover:border-[#3a3d4a] hover:shadow-lg transition-all"
+                  style={{ width: 140, height: 100 }}>
+                  <img src={img.url} alt={img.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={(e) => { (e.target as HTMLImageElement).closest("a")!.style.display = "none"; }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                    <span className="text-white text-[10px] font-medium line-clamp-2 leading-tight">{img.title}</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── ANSWER ── */}
         {(answer || (loading && (results.length > 0 || isConnectorMode))) && (
           <div className="border border-gray-200 dark:border-[#2a2d3a] rounded-2xl p-6 mb-6 bg-white dark:bg-[#1a1d27] shadow-sm">
@@ -960,8 +997,25 @@ export default function Home() {
                   ol: ({ children }) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
                   li: ({ children }) => <li className="leading-relaxed">{children}</li>,
                   strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
-                  code: ({ children }) => <code className="bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded text-[12px] font-mono">{children}</code>,
-                  pre: ({ children }) => <pre className="bg-gray-50 border border-gray-200 rounded-xl p-4 overflow-x-auto text-[12px] font-mono mb-3">{children}</pre>,
+                  code: ({ className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const lang = match ? match[1] : "";
+                    const inline = !className;
+                    if (!inline && lang) {
+                      return (
+                        <SyntaxHighlighter
+                          language={lang}
+                          style={isDark ? oneDark : oneLight}
+                          customStyle={{ borderRadius: "12px", fontSize: "12px", marginBottom: "12px" }}
+                          PreTag="div"
+                        >
+                          {String(children).replace(/\n$/, "")}
+                        </SyntaxHighlighter>
+                      );
+                    }
+                    return <code className="bg-gray-100 dark:bg-[#2a2d3a] text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-[12px] font-mono" {...props}>{children}</code>;
+                  },
+                  pre: ({ children }) => <div className="mb-3">{children}</div>,
                   blockquote: ({ children }) => <blockquote className="border-l-4 border-teal-300 pl-4 text-gray-500 italic mb-3">{children}</blockquote>,
                   table: ({ children }) => <div className="overflow-x-auto mb-3"><table className="w-full text-xs border-collapse">{children}</table></div>,
                   th: ({ children }) => <th className="border border-gray-200 px-3 py-2 bg-gray-50 font-semibold text-left">{children}</th>,
@@ -1030,9 +1084,12 @@ export default function Home() {
       </main>
 
       {/* ── FOOTER ── */}
-      <footer className="fixed bottom-0 left-0 right-0 border-t border-gray-200/80 dark:border-[#2a2d3a]/80 bg-white/80 dark:bg-[#1a1d27]/80 backdrop-blur-md px-6 py-2.5 flex justify-between text-[10px] text-gray-400 font-medium">
-        <span>QUAERYX · Open Source · Apache 2.0</span>
-        <a href="https://github.com/Vinseek91/quaeryx" target="_blank" className="hover:text-gray-600 transition-colors">github.com/Vinseek91/quaeryx</a>
+      <footer className="fixed bottom-0 left-0 right-0 border-t border-gray-200/80 dark:border-[#2a2d3a]/80 bg-white/80 dark:bg-[#1a1d27]/80 backdrop-blur-md px-4 sm:px-6 py-2.5 flex justify-between items-center text-[10px] text-gray-400 font-medium">
+        <span className="flex items-center gap-3">
+          <span>QUAERYX · Apache 2.0</span>
+          <a href="/api-docs" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors hidden sm:inline">API Docs</a>
+        </span>
+        <a href="https://github.com/Vinseek91/quaeryx" target="_blank" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors hidden sm:inline">github.com/Vinseek91/quaeryx</a>
       </footer>
     </div>
   );
