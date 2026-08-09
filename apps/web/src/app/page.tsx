@@ -149,17 +149,21 @@ export default function Home() {
       {/* ── HEADER ── */}
       <header className="border-b border-gray-200/80 px-6 py-3.5 flex items-center gap-4 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-2.5">
-          <svg width="32" height="32" viewBox="0 0 36 36">
+          <svg width="34" height="34" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
-              <linearGradient id="qg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <linearGradient id="qgrad" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
                 <stop offset="0%"   stopColor="#4285F4"/>
                 <stop offset="50%"  stopColor="#3fe0a8"/>
                 <stop offset="100%" stopColor="#FBBC05"/>
               </linearGradient>
             </defs>
-            <circle cx="18" cy="18" r="16" fill="url(#qg)" opacity="0.15"/>
-            <circle cx="18" cy="18" r="16" fill="none" stroke="url(#qg)" strokeWidth="2"/>
-            <text x="18" y="23" textAnchor="middle" fontSize="13" fontWeight="800" fill="#1f2937">Q</text>
+            {/* Bold Q body */}
+            <circle cx="19" cy="19" r="13" fill="url(#qgrad)" opacity="0.12"/>
+            <circle cx="19" cy="19" r="13" fill="none" stroke="url(#qgrad)" strokeWidth="3.5"/>
+            {/* Extended tail — the search arrow */}
+            <line x1="27" y1="27" x2="38" y2="38" stroke="url(#qgrad)" strokeWidth="4" strokeLinecap="round"/>
+            {/* Inner dot */}
+            <circle cx="19" cy="19" r="4" fill="url(#qgrad)"/>
           </svg>
           <span className="text-lg font-bold tracking-widest text-gray-900">QUAERYX</span>
         </div>
@@ -180,6 +184,21 @@ export default function Home() {
         {/* ── HERO ── */}
         {!answer && results.length === 0 && !loading && (
           <div className="text-center mb-12">
+            <div className="flex justify-center mb-5">
+              <svg width="72" height="72" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="qgrad2" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stopColor="#4285F4"/>
+                    <stop offset="50%"  stopColor="#3fe0a8"/>
+                    <stop offset="100%" stopColor="#FBBC05"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="19" cy="19" r="13" fill="url(#qgrad2)" opacity="0.12"/>
+                <circle cx="19" cy="19" r="13" fill="none" stroke="url(#qgrad2)" strokeWidth="3.5"/>
+                <line x1="27" y1="27" x2="38" y2="38" stroke="url(#qgrad2)" strokeWidth="4" strokeLinecap="round"/>
+                <circle cx="19" cy="19" r="4" fill="url(#qgrad2)"/>
+              </svg>
+            </div>
             <h1 className="text-7xl font-black mb-3 bg-gradient-to-r from-blue-500 via-teal-400 to-amber-400 bg-clip-text text-transparent tracking-widest leading-tight">
               QUAERYX
             </h1>

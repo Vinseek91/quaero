@@ -1,0 +1,13 @@
+<svg width="32" height="32" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="qgrad" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4285F4"/>
+      <stop offset="50%" stop-color="#3fe0a8"/>
+      <stop offset="100%" stop-color="#FBBC05"/>
+    </linearGradient>
+  </defs>
+  <circle cx="19" cy="19" r="13" fill="url(#qgrad)" opacity="0.12"/>
+  <circle cx="19" cy="19" r="13" fill="none" stroke="url(#qgrad)" stroke-width="3.5"/>
+  <line x1="27" y1="27" x2="38" y2="38" stroke="url(#qgrad)" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="19" cy="19" r="4" fill="url(#qgrad)"/>
+</svg>
