@@ -159,8 +159,17 @@ export default function Home() {
   // Export
   const [exported, setExported]         = useState(false);
 
+  // Copy answer
+  const [answerCopied, setAnswerCopied] = useState(false);
+
+  // Dark mode
+  const [isDark, setIsDark]             = useState(false);
+
   // Share
   const [copied, setCopied]             = useState(false);
+
+  // Search input ref for keyboard shortcuts
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Model selector
   const [selectedModel, setSelectedModel] = useState("llama-3.3-70b-versatile");
@@ -169,6 +178,48 @@ export default function Home() {
   const answerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setVisible(true); }, []);
+
+  // Load dark mode preference
+  useEffect(() => {
+    const saved = localStorage.getItem("quaeryx_dark");
+    if (saved === "1") { setIsDark(true); document.documentElement.classList.add("dark"); }
+  }, []);
+
+  const toggleDark = () => {
+    setIsDark((d) => {
+      const next = !d;
+      if (next) { document.documentElement.classList.add("dark"); localStorage.setItem("quaeryx_dark", "1"); }
+      else       { document.documentElement.classList.remove("dark"); localStorage.removeItem("quaeryx_dark"); }
+      return next;
+    });
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      const inInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+      // Cmd+K or Ctrl+K — focus search
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+      // "/" — focus search (when not already typing)
+      if (e.key === "/" && !inInput) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      // Escape — blur and close dropdowns
+      if (e.key === "Escape") {
+        (document.activeElement as HTMLElement)?.blur();
+        setShowHistory(false);
+        setShowModelMenu(false);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
   // Load search history from localStorage
   useEffect(() => {
@@ -359,6 +410,14 @@ export default function Home() {
     try { localStorage.removeItem(HISTORY_KEY); } catch {}
   };
 
+  const copyAnswer = () => {
+    if (!answer) return;
+    navigator.clipboard.writeText(answer).then(() => {
+      setAnswerCopied(true);
+      setTimeout(() => setAnswerCopied(false), 2000);
+    });
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     runSearch(query, mode);
@@ -454,24 +513,26 @@ export default function Home() {
           <span className="text-lg font-bold tracking-widest text-gray-900">QUAERYX</span>
         </div>
         <span className="text-[11px] text-gray-400 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2">
           {hasResults && (
             <>
-              <button
-                onClick={handleExport}
+              <button onClick={handleExport}
                 className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
-                title="Download answer as Markdown"
-              >
+                title="Download as Markdown">
                 {exported ? <><span>✓</span> Saved!</> : <><span>↓</span> Export</>}
               </button>
-              <button
-                onClick={handleShare}
-                className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
-              >
+              <button onClick={handleShare}
+                className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5">
                 {copied ? <><span>✓</span> Copied!</> : <><span>↗</span> Share</>}
               </button>
             </>
           )}
+          {/* Dark mode toggle */}
+          <button onClick={toggleDark}
+            className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 w-8 h-8 rounded-lg hover:shadow-sm flex items-center justify-center"
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}>
+            {isDark ? "☀" : "☾"}
+          </button>
           <a href="https://github.com/Vinseek91/quaeryx" target="_blank"
             className="text-xs text-gray-500 hover:text-gray-900 transition-all border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5">
             <span>★</span> GitHub
@@ -588,6 +649,7 @@ export default function Home() {
           <div className="flex gap-2.5 mb-4">
             <div className="flex-1 relative flex items-center" data-search-box>
               <input
+                ref={searchInputRef}
                 value={query}
                 onChange={(e) => handleQueryChange(e.target.value)}
                 onFocus={() => setShowHistory(true)}
@@ -761,6 +823,14 @@ export default function Home() {
             </div>
           )}
 
+          {/* Keyboard shortcut hint — only shown on homepage */}
+          {!hasResults && !loading && (
+            <div className="text-[10px] text-gray-400 mb-3 flex items-center gap-3">
+              <span><kbd className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[10px] font-mono">/</kbd> or <kbd className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[10px] font-mono">⌘K</kbd> to focus</span>
+              <span><kbd className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[10px] font-mono">Esc</kbd> to dismiss</span>
+            </div>
+          )}
+
           {/* Mode tabs */}
           <div className="flex gap-2 flex-wrap items-center">
             {MODES.map((m) => (
@@ -854,11 +924,20 @@ export default function Home() {
         {/* ── ANSWER ── */}
         {(answer || (loading && (results.length > 0 || isConnectorMode))) && (
           <div className="border border-gray-200 rounded-2xl p-6 mb-6 bg-white shadow-sm">
-            <div className="text-[10px] text-teal-600 mb-4 tracking-widest flex items-center gap-2 font-semibold uppercase">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"/>
-              {isConnectorMode
-                ? `QUAERYX ANALYST · ${selectedModelInfo.label}`
-                : `QUAERYX SYNTHESIS · ${results.length} SOURCES · ${selectedModelInfo.label}`}
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-[10px] text-teal-600 tracking-widest flex items-center gap-2 font-semibold uppercase">
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"/>
+                {isConnectorMode
+                  ? `QUAERYX ANALYST · ${selectedModelInfo.label}`
+                  : `QUAERYX SYNTHESIS · ${results.length} SOURCES · ${selectedModelInfo.label}`}
+              </div>
+              {answer && !loading && (
+                <button onClick={copyAnswer}
+                  className="text-[11px] text-gray-400 hover:text-gray-700 border border-gray-200 hover:border-gray-400 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 hover:shadow-sm"
+                  title="Copy answer">
+                  {answerCopied ? "✓ Copied" : "⎘ Copy"}
+                </button>
+              )}
             </div>
             <div
               ref={answerRef}
