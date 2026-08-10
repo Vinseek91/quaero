@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: quaeryx-api
+    name: quaeryx
     runtime: python
     rootDir: apps/api
     buildCommand: pip install --upgrade pip && pip install --prefer-binary -r requirements.txt
