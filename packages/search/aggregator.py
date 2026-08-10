@@ -113,11 +113,11 @@ class UniversalSearchAggregator:
         ]
 
     async def _ddg_search(self, query: str) -> list[SearchResult]:
-        """DuckDuckGo — free, no API key needed. Run sync lib in thread pool."""
+        """DuckDuckGo (ddgs) — free, no API key needed. Run sync lib in thread pool."""
         import asyncio
         def _run():
             try:
-                from duckduckgo_search import DDGS
+                from ddgs import DDGS
                 ddgs = DDGS()
                 return list(ddgs.text(query, max_results=10))
             except Exception as e:
