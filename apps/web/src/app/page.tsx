@@ -281,10 +281,12 @@ export default function Home() {
     if (answerRef.current) answerRef.current.scrollTop = answerRef.current.scrollHeight;
   }, [answer]);
 
-  // Close model menu on outside click
+  // Close model menu and more menu on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!(e.target as HTMLElement).closest("[data-model-menu]")) setShowModelMenu(false);
+      if (!(e.target as HTMLElement).closest("[data-more-menu]"))
+        document.querySelector("[data-more-panel]")?.classList.add("hidden");
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -573,37 +575,54 @@ export default function Home() {
           {hasResults && (
             <>
               <button onClick={handleExport}
-                className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
+                className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] px-2.5 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1"
                 title="Download as Markdown">
-                {exported ? <><span>✓</span> Saved!</> : <><span>↓</span> Export</>}
+                {exported ? "✓" : "↓ Export"}
               </button>
               <button onClick={handleShare}
-                className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5">
-                {copied ? <><span>✓</span> Copied!</> : <><span>↗</span> Share</>}
+                className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] px-2.5 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1">
+                {copied ? "✓" : "↗ Share"}
               </button>
             </>
           )}
-          {/* Collections */}
-          <button onClick={() => setShowCollections(true)}
-            className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
-            title="Saved searches">
-            Saved {collections.length > 0 && <span className="bg-teal-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">{collections.length}</span>}
-          </button>
           {/* Dark mode toggle */}
           <button onClick={toggleDark}
-            className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
+            className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] px-2.5 py-1.5 rounded-lg hover:shadow-sm"
             title={isDark ? "Switch to light mode" : "Switch to dark mode"}>
             {isDark ? "Light" : "Dark"}
           </button>
-          {/* Settings */}
-          <button onClick={() => setShowSettings(true)}
-            className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5"
-            title="API key settings">
-            API Keys
-          </button>
+          {/* More menu — Saved, API Keys */}
+          <div className="relative" data-more-menu>
+            <button
+              onClick={() => document.querySelector("[data-more-panel]")?.classList.toggle("hidden")}
+              className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] px-2.5 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1">
+              ···
+              {collections.length > 0 && <span className="bg-teal-500 text-white text-[9px] w-4 h-4 rounded-full font-bold flex items-center justify-center">{collections.length}</span>}
+            </button>
+            <div data-more-panel className="hidden absolute right-0 top-full mt-1.5 bg-white dark:bg-[#1a1d27] border border-gray-200 dark:border-[#2a2d3a] rounded-xl shadow-xl z-50 w-40 py-1 overflow-hidden">
+              <button onClick={() => { setShowCollections(true); document.querySelector("[data-more-panel]")?.classList.add("hidden"); }}
+                className="w-full text-left px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3a] flex items-center justify-between transition-colors">
+                Saved searches
+                {collections.length > 0 && <span className="bg-teal-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">{collections.length}</span>}
+              </button>
+              <button onClick={() => { setShowSettings(true); document.querySelector("[data-more-panel]")?.classList.add("hidden"); }}
+                className="w-full text-left px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3a] transition-colors">
+                API Keys
+              </button>
+              <div className="border-t border-gray-100 dark:border-[#2a2d3a] my-1"/>
+              <a href="/admin"
+                className="block px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3a] transition-colors">
+                Analytics
+              </a>
+              <a href="/api-docs"
+                className="block px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3a] transition-colors">
+                API Docs
+              </a>
+            </div>
+          </div>
           <a href="https://github.com/Vinseek91/quaeryx" target="_blank"
-            className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] dark:hover:border-[#444] px-3 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1.5">
-            <span>★</span> GitHub
+            className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border border-gray-200 hover:border-gray-400 dark:border-[#2a2d3a] px-2.5 py-1.5 rounded-lg hover:shadow-sm flex items-center gap-1">
+            GitHub
           </a>
         </div>
       </header>
@@ -685,7 +704,7 @@ export default function Home() {
         )}
 
         {/* ── SEARCH FORM ── */}
-        <form onSubmit={handleSearch} className="mb-8">
+        <form onSubmit={handleSearch} className="mb-6">
 
           {/* Active connector badge */}
           {(uploadedFile || (connector && connector !== null)) && (
@@ -727,7 +746,7 @@ export default function Home() {
           )}
 
           {/* Search input */}
-          <div className="flex gap-2.5 mb-4">
+          <div className="flex gap-2.5 mb-3">
             <div className="flex-1 relative flex items-center" data-search-box>
               <input
                 ref={searchInputRef}
@@ -811,7 +830,6 @@ export default function Home() {
 
           {/* Connector row — scrollable on mobile */}
           <div className="flex gap-2 items-center mb-3 overflow-x-auto pb-1 scrollbar-hide">
-            <span className="text-[10px] text-gray-400 font-semibold tracking-widest uppercase">Connectors</span>
             {/* URL */}
             <button
               type="button"
@@ -913,31 +931,32 @@ export default function Home() {
           )}
 
           {/* Mode tabs */}
-          <div className="flex gap-2 flex-wrap items-center">
+          <div className="flex gap-1.5 items-center overflow-x-auto pb-1 scrollbar-hide">
             {MODES.map((m) => (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => setMode(m.id)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   mode === m.id
-                    ? "border-teal-400 bg-teal-50 text-teal-700 shadow-sm"
-                    : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700 hover:bg-white hover:shadow-sm bg-transparent"
+                    ? "bg-teal-500 text-white shadow-sm"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#2a2d3a]"
                 }`}
               >
-                {m.icon} {m.label}
+                {m.label}
               </button>
             ))}
+            <div className="w-px h-4 bg-gray-200 dark:bg-[#2a2d3a] mx-1 shrink-0"/>
             <button
               type="button"
               onClick={() => setDeepResearch((d) => !d)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 deepResearch
-                  ? "border-purple-400 bg-purple-50 text-purple-700 shadow-sm"
-                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
+                  ? "bg-purple-500 text-white shadow-sm"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#2a2d3a]"
               }`}
             >
-              ◈ Deep Research
+              Deep Research
             </button>
           </div>
         </form>
@@ -971,32 +990,32 @@ export default function Home() {
 
         {/* ── SOURCE RESULTS GRID ── */}
         {results.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-5">
             {results.slice(0, 8).map((r, i) => (
               <a
                 key={i}
                 href={r.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="border border-gray-200 dark:border-[#2a2d3a] rounded-2xl p-4 hover:border-gray-300 dark:hover:border-[#3a3d4a] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 block group bg-white dark:bg-[#1a1d27] shadow-sm"
+                className="border border-gray-200 dark:border-[#2a2d3a] rounded-xl p-3 hover:border-gray-300 dark:hover:border-[#3a3d4a] hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 block group bg-white dark:bg-[#1a1d27]"
               >
-                <div className="flex items-center gap-2 mb-2.5">
+                <div className="flex items-center gap-1.5 mb-1.5">
                   <img
                     src={getFavicon(r.url, r.source)}
                     alt={r.source}
-                    width={16} height={16}
-                    className="rounded-sm opacity-80"
+                    width={14} height={14}
+                    className="rounded-sm opacity-70 shrink-0"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
-                  <span className={`text-[10px] px-2 py-0.5 rounded-lg font-semibold uppercase tracking-wide ${SOURCE_COLORS[r.source] || "bg-gray-100 text-gray-600"}`}>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide ${SOURCE_COLORS[r.source] || "bg-gray-100 text-gray-600"}`}>
                     {r.source.replace("_", " ")}
                   </span>
                   {r.appearances > 1 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-lg bg-teal-50 text-teal-600 font-semibold ml-auto">×{r.appearances}</span>
+                    <span className="text-[10px] text-teal-500 font-semibold ml-auto">×{r.appearances}</span>
                   )}
                 </div>
-                <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-2 group-hover:text-gray-900 dark:group-hover:text-white transition-colors font-semibold leading-snug mb-1.5">{r.title}</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 line-clamp-2 leading-relaxed">{r.snippet}</p>
+                <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-2 group-hover:text-gray-900 dark:group-hover:text-white transition-colors font-medium leading-snug mb-1">{r.title}</p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-relaxed">{r.snippet}</p>
               </a>
             ))}
           </div>

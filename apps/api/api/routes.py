@@ -101,18 +101,15 @@ async def search(
             # Send search results first
             yield f"data: {json.dumps({'type': 'results', 'data': results[:10]})}\n\n"
 
-            # Stream reasoning (graceful fallback if LLM unavailable)
+            # Stream reasoning
             try:
                 async for chunk in reasoner.synthesise(q, results, stream=True, mode=effective_mode, model=model, language=detected_lang, comparison=comparison):
                     yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
             except Exception as e:
-                logger.warning(f"Reasoning failed: {e}")
-                # Fallback: return top snippets as the answer
-                fallback = "\n\n".join([
-                    f"**{r['title']}**\n{r['snippet']}\n{r['url']}"
-                    for r in results[:5] if r.get('snippet')
-                ])
-                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': fallback or 'Results found above. Add an OpenAI/Anthropic API key or start OmniRoute for AI synthesis.'})}\n\n"
+                logger.error(f"Reasoning failed: {e}")
+                err_type = type(e).__name__
+                err_msg = str(e)[:300]
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'**AI synthesis error** (`{err_type}`): {err_msg}\n\nCheck that `GROQ_API_KEY` is set correctly in your Render environment variables.'})}\n\n"
 
             # MiroFish prediction (if enabled)
             if needs_prediction or intent.get("is_controversial"):
