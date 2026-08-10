@@ -45,9 +45,15 @@ from packages.reasoning.engine import ReasoningEngine
 from packages.mirofish.client import MiroFishClient
 
 router = APIRouter()
-searcher = UniversalSearchAggregator(settings)
-reasoner = ReasoningEngine()
-mirofish = MiroFishClient()
+
+try:
+    searcher = UniversalSearchAggregator(settings)
+    reasoner = ReasoningEngine()
+    mirofish = MiroFishClient()
+    logger.info(f"QUAERYX initialized — groq={'yes' if settings.GROQ_API_KEY else 'NO KEY'}")
+except Exception as e:
+    logger.error(f"Startup error: {e}")
+    raise
 
 
 @router.get("/search")
