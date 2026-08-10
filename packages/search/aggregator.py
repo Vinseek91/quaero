@@ -52,6 +52,12 @@ class UniversalSearchAggregator:
                 else:
                     seen[key] = r
 
+        # Filter academic-only domains from general/news/code/prediction modes
+        ACADEMIC_DOMAINS = {"arxiv.org", "semanticscholar.org", "pubmed.ncbi.nlm.nih.gov"}
+        if mode not in ("academic",):
+            seen = {k: v for k, v in seen.items()
+                    if not any(d in v.url for d in ACADEMIC_DOMAINS)}
+
         # Rank: boost results that appeared across multiple providers
         ranked = sorted(seen.values(), key=lambda r: r.score * r.appearances, reverse=True)
         return [r.to_dict() for r in ranked[:top_k]]
