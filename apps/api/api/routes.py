@@ -30,14 +30,45 @@ def _cache_set(key: str, val: any):
         for k, _ in oldest:
             del _cache[k]
 
-# ── Analytics counters (in-memory, resets on restart) ─────────────────────
-_stats = {
-    "total_searches": 0,
-    "searches_by_mode": Counter(),
-    "top_queries": Counter(),
-    "searches_by_hour": Counter(),   # key = "YYYY-MM-DD HH"
-    "started_at": time.time(),
-}
+# ── Analytics — persisted to disk so stats survive Render restarts ─────────
+_STATS_FILE = "/tmp/quaeryx_stats.json"
+
+def _load_stats() -> dict:
+    try:
+        import json as _json
+        with open(_STATS_FILE) as f:
+            d = _json.load(f)
+            return {
+                "total_searches":   d.get("total_searches", 0),
+                "searches_by_mode": Counter(d.get("searches_by_mode", {})),
+                "top_queries":      Counter(d.get("top_queries", {})),
+                "searches_by_hour": Counter(d.get("searches_by_hour", {})),
+                "started_at":       d.get("started_at", time.time()),
+            }
+    except Exception:
+        return {
+            "total_searches": 0,
+            "searches_by_mode": Counter(),
+            "top_queries": Counter(),
+            "searches_by_hour": Counter(),
+            "started_at": time.time(),
+        }
+
+def _save_stats():
+    try:
+        import json as _json
+        with open(_STATS_FILE, "w") as f:
+            _json.dump({
+                "total_searches":   _stats["total_searches"],
+                "searches_by_mode": dict(_stats["searches_by_mode"]),
+                "top_queries":      dict(_stats["top_queries"]),
+                "searches_by_hour": dict(_stats["searches_by_hour"]),
+                "started_at":       _stats["started_at"],
+            }, f)
+    except Exception as e:
+        logger.warning(f"Could not save stats: {e}")
+
+_stats = _load_stats()
 
 from core.config import settings
 from packages.search.aggregator import UniversalSearchAggregator
@@ -79,6 +110,9 @@ async def search(
         least = _stats["top_queries"].most_common()[:-201:-1]
         for k, _ in least:
             del _stats["top_queries"][k]
+    # Persist every 10 searches
+    if _stats["total_searches"] % 10 == 0:
+        _save_stats()
 
     # 0. Detect language
     detected_lang = "en"

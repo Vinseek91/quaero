@@ -1,7 +1,6 @@
 """
 QUAERYX Reasoning Engine
-Multi-agent synthesis with OmniRoute model routing.
-Falls back to Groq (free) when OmniRoute is unavailable.
+Fallback chain: Groq → Gemini → OmniRoute/local → error
 """
 import asyncio
 from openai import AsyncOpenAI
@@ -11,24 +10,31 @@ from core.config import settings
 
 class ReasoningEngine:
     def __init__(self):
-        # Groq free API (primary on cloud; fallback locally)
+        # 1. Groq — primary (fast, free, cloud-reliable)
         self.groq_client = AsyncOpenAI(
             base_url="https://api.groq.com/openai/v1",
             api_key=settings.GROQ_API_KEY,
         ) if settings.GROQ_API_KEY else None
 
-        # OmniRoute / local LLM — only used if base URL is NOT localhost
-        # (localhost:20128 is unreachable when deployed on Render/cloud)
+        # 2. Gemini — second fallback (OpenAI-compatible endpoint)
+        self.gemini_client = AsyncOpenAI(
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            api_key=settings.GEMINI_API_KEY,
+        ) if settings.GEMINI_API_KEY else None
+
+        # 3. OmniRoute / local LLM — only if base URL is non-localhost
         base_url = settings.OPENAI_BASE_URL
         is_local = "localhost" in base_url or "127.0.0.1" in base_url
-        if is_local and self.groq_client:
-            # On cloud with Groq available — skip OmniRoute entirely
+        if is_local and (self.groq_client or self.gemini_client):
             self.client = None
         else:
             self.client = AsyncOpenAI(
                 base_url=base_url,
                 api_key=settings.OPENAI_API_KEY,
             )
+
+        available = [n for n, c in [("Groq", self.groq_client), ("Gemini", self.gemini_client), ("OmniRoute", self.client)] if c]
+        logger.info(f"ReasoningEngine ready — providers: {', '.join(available) or 'NONE'}")
 
     async def synthesise(
         self,
@@ -69,46 +75,41 @@ Search Results:
 Provide a comprehensive, cited answer. For each key claim, cite [source N].
 End with 3 follow-up research questions.{lang_note}"""
 
-        groq_model = model or "llama-3.3-70b-versatile"
-        primary_model = self._select_model(mode, len(results))
+        groq_model   = model or "llama-3.3-70b-versatile"
+        gemini_model = "gemini-2.0-flash"
+        local_model  = self._select_model(mode, len(results))
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
-        # Choose client: prefer Groq if available (cloud-reliable), else OmniRoute/local
-        active_client = self.groq_client or self.client
-        active_model  = groq_model if active_client is self.groq_client else primary_model
+        # Fallback chain: Groq → Gemini → OmniRoute
+        providers = []
+        if self.groq_client:   providers.append((self.groq_client,   groq_model,   "Groq"))
+        if self.gemini_client: providers.append((self.gemini_client, gemini_model, "Gemini"))
+        if self.client:        providers.append((self.client,        local_model,  "OmniRoute"))
 
-        if active_client is None:
-            raise RuntimeError("No LLM available — set GROQ_API_KEY in environment variables")
+        if not providers:
+            raise RuntimeError("No LLM provider configured — set GROQ_API_KEY or GEMINI_API_KEY")
 
-        try:
-            if stream:
-                async for chunk in await active_client.chat.completions.create(
-                    model=active_model, messages=messages, stream=True, temperature=0.3,
-                ):
-                    if chunk.choices[0].delta.content:
-                        yield chunk.choices[0].delta.content
-            else:
-                resp = await active_client.chat.completions.create(
-                    model=active_model, messages=messages, temperature=0.3,
-                )
-                yield resp.choices[0].message.content
-        except Exception as e:
-            # If Groq failed and we have OmniRoute as backup, try it
-            if active_client is self.groq_client and self.client:
-                logger.warning(f"Groq failed: {e} — trying OmniRoute fallback")
+        last_error = None
+        for client, mdl, name in providers:
+            try:
+                logger.info(f"Trying {name} ({mdl})")
                 if stream:
-                    async for chunk in await self.client.chat.completions.create(
-                        model=primary_model, messages=messages, stream=True, temperature=0.3,
+                    async for chunk in await client.chat.completions.create(
+                        model=mdl, messages=messages, stream=True, temperature=0.3,
                     ):
                         if chunk.choices[0].delta.content:
                             yield chunk.choices[0].delta.content
                 else:
-                    resp = await self.client.chat.completions.create(
-                        model=primary_model, messages=messages, temperature=0.3,
+                    resp = await client.chat.completions.create(
+                        model=mdl, messages=messages, temperature=0.3,
                     )
                     yield resp.choices[0].message.content
-            else:
-                raise
+                return  # success — stop chain
+            except Exception as e:
+                logger.warning(f"{name} failed: {e} — trying next provider")
+                last_error = e
+
+        raise last_error or RuntimeError("All LLM providers failed")
 
     async def analyse_document(
         self,

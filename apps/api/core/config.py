@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # Groq free API fallback (when OmniRoute unavailable)
     GROQ_API_KEY: Optional[str] = None
 
+    # Gemini free API (second fallback)
+    GEMINI_API_KEY: Optional[str] = None
+
     # Search providers (all have free tiers)
     BRAVE_API_KEY: Optional[str] = None
     TAVILY_API_KEY: Optional[str] = None
