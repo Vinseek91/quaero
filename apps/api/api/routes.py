@@ -535,6 +535,26 @@ async def list_providers():
     }
 
 
+@router.get("/test-groq")
+async def test_groq():
+    """Test Groq API connectivity and key validity."""
+    import os
+    key = settings.GROQ_API_KEY
+    if not key:
+        return {"ok": False, "error": "GROQ_API_KEY is not set in environment variables"}
+    try:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=key)
+        resp = await client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": "Reply with just the word OK"}],
+            max_tokens=5,
+        )
+        return {"ok": True, "response": resp.choices[0].message.content, "key_prefix": key[:8] + "..."}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "error_type": type(e).__name__, "key_prefix": key[:8] + "..."}
+
+
 @router.get("/stats")
 async def get_stats():
     """Analytics stats — total searches, popular queries, usage by mode/hour."""
