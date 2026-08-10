@@ -115,7 +115,8 @@ async def search(
                 logger.error(f"Reasoning failed: {e}")
                 err_type = type(e).__name__
                 err_msg = str(e)[:300]
-                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'**AI synthesis error** (`{err_type}`): {err_msg}\n\nCheck that `GROQ_API_KEY` is set correctly in your Render environment variables.'})}\n\n"
+                err_text = f"**AI synthesis error** (`{err_type}`): {err_msg}\n\nCheck that `GROQ_API_KEY` is set correctly in your Render environment variables."
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': err_text})}\n\n"
 
             # MiroFish prediction (if enabled)
             if needs_prediction or intent.get("is_controversial"):
