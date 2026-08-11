@@ -80,15 +80,23 @@ Search Results:
 Provide a comprehensive, cited answer. For each key claim, cite [source N].
 End with 3 follow-up research questions.{lang_note}"""
 
-        groq_model   = model or "llama-3.3-70b-versatile"
-        gemini_model = "gemini-2.0-flash"
+        # If user explicitly selected a Gemini model, route directly to Gemini
+        GEMINI_MODELS = {"gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"}
+        is_gemini = model and model in GEMINI_MODELS
+
+        groq_model   = model if (model and not is_gemini) else "llama-3.3-70b-versatile"
+        gemini_model = model if is_gemini else "gemini-2.0-flash"
         local_model  = self._select_model(mode, len(results))
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
-        # Fallback chain: Groq → Gemini → OmniRoute
+        # Fallback chain — if Gemini model selected, try Gemini first
         providers = []
-        if self.groq_client:   providers.append((self.groq_client,   groq_model,   "Groq"))
-        if self.gemini_client: providers.append((self.gemini_client, gemini_model, "Gemini"))
+        if is_gemini:
+            if self.gemini_client: providers.append((self.gemini_client, gemini_model, "Gemini"))
+            if self.groq_client:   providers.append((self.groq_client,   groq_model,   "Groq"))
+        else:
+            if self.groq_client:   providers.append((self.groq_client,   groq_model,   "Groq"))
+            if self.gemini_client: providers.append((self.gemini_client, gemini_model, "Gemini"))
         if self.client:        providers.append((self.client,        local_model,  "OmniRoute"))
 
         if not providers:

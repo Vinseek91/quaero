@@ -65,11 +65,13 @@ const MODES: { id: SearchMode; label: string; icon: string }[] = [
 ];
 
 const GROQ_MODELS = [
-  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B",  desc: "Best quality · Default"    },
-  { id: "llama-3.1-8b-instant",    label: "Llama 3.1 8B",   desc: "Lightning fast · 2× speed" },
-  { id: "mixtral-8x7b-32768",      label: "Mixtral 8×7B",   desc: "32K context window"         },
-  { id: "gemma2-9b-it",            label: "Gemma 2 9B",     desc: "Google · Efficient"         },
-  { id: "llama3-70b-8192",         label: "Llama 3 70B",    desc: "Classic · Reliable"         },
+  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B",      desc: "Best quality · Default",      provider: "Groq"   },
+  { id: "llama-3.1-8b-instant",    label: "Llama 3.1 8B",       desc: "Lightning fast · 2× speed",   provider: "Groq"   },
+  { id: "mixtral-8x7b-32768",      label: "Mixtral 8×7B",       desc: "32K context window",           provider: "Groq"   },
+  { id: "gemma2-9b-it",            label: "Gemma 2 9B",         desc: "Google · Efficient",           provider: "Groq"   },
+  { id: "llama3-70b-8192",         label: "Llama 3 70B",        desc: "Classic · Reliable",           provider: "Groq"   },
+  { id: "gemini-2.0-flash",        label: "Gemini 2.0 Flash",   desc: "Google · Fast & smart",        provider: "Gemini" },
+  { id: "gemini-1.5-flash",        label: "Gemini 1.5 Flash",   desc: "Google · 1M context",          provider: "Gemini" },
 ];
 
 function getFavicon(url: string, source: string): string {
@@ -951,12 +953,16 @@ export default function Home() {
                     <span className="text-[10px] font-semibold text-gray-500 tracking-widest uppercase">AI Model</span>
                     <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg">ALL FREE</span>
                   </div>
-                  {GROQ_MODELS.map((m) => (
+                  {/* Groq models */}
+                  <div className="px-4 pt-2 pb-1">
+                    <span className="text-[9px] font-bold text-gray-400 tracking-widest uppercase">Groq</span>
+                  </div>
+                  {GROQ_MODELS.filter(m => m.provider === "Groq").map((m) => (
                     <button
                       key={m.id}
                       type="button"
                       onClick={() => { setSelectedModel(m.id); setShowModelMenu(false); }}
-                      className={`w-full text-left px-4 py-3 text-sm transition-colors flex items-center justify-between ${
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
                         selectedModel === m.id ? "bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3a]"
                       }`}
                     >
@@ -967,8 +973,28 @@ export default function Home() {
                       {selectedModel === m.id && <span className="text-orange-500 font-bold">✓</span>}
                     </button>
                   ))}
-                  <div className="px-4 py-2 border-t border-gray-100 dark:border-[#2a2d3a] text-[10px] text-gray-400 text-center">
-                    Powered by Groq · No paywalls · No lock icons
+                  {/* Gemini models */}
+                  <div className="px-4 pt-3 pb-1 border-t border-gray-100 dark:border-[#2a2d3a] mt-1">
+                    <span className="text-[9px] font-bold text-blue-400 tracking-widest uppercase">Google Gemini</span>
+                  </div>
+                  {GROQ_MODELS.filter(m => m.provider === "Gemini").map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => { setSelectedModel(m.id); setShowModelMenu(false); }}
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
+                        selectedModel === m.id ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3a]"
+                      }`}
+                    >
+                      <div>
+                        <div className="font-semibold text-[13px]">{m.label}</div>
+                        <div className="text-[11px] text-gray-400">{m.desc}</div>
+                      </div>
+                      {selectedModel === m.id && <span className="text-blue-500 font-bold">✓</span>}
+                    </button>
+                  ))}
+                  <div className="px-4 py-2 border-t border-gray-100 dark:border-[#2a2d3a] text-[10px] text-gray-400 text-center mt-1">
+                    All free · Groq + Gemini fallback chain
                   </div>
                 </div>
               )}
