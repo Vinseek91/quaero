@@ -233,7 +233,7 @@ Results summary: {' '.join([r['snippet'][:100] for r in results[:5]])}"""
 
         # Final synthesis
         yield f"data: {json.dumps({'type': 'synthesising'})}\n\n"
-        async for chunk in reasoner.synthesise(q, all_results, stream=True, mode="general"):
+        async for chunk in reasoner.synthesise(q, all_results, stream=True, mode="general", language="en"):
             yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
 
         # MiroFish prediction on deep research topics
@@ -298,9 +298,13 @@ async def analyze_url(
     from bs4 import BeautifulSoup
 
     async def url_stream():
+        # Auto-add protocol if missing
+        normalized_url = url.strip()
+        if normalized_url and not normalized_url.startswith(("http://", "https://")):
+            normalized_url = "https://" + normalized_url
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-                resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; QUAERYX/1.0)"})
+                resp = await client.get(normalized_url, headers={"User-Agent": "Mozilla/5.0 (compatible; QUAERYX/1.0)"})
                 soup = BeautifulSoup(resp.text, "html.parser")
                 for tag in soup(["script", "style", "nav", "footer", "header", "aside", "iframe"]):
                     tag.decompose()

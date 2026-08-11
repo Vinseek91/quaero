@@ -50,8 +50,13 @@ class ReasoningEngine:
         context = self._format_results(results)
         system = self._system_prompt(mode)
 
-        # Language instruction
-        lang_note = "" if language == "en" else f"\nIMPORTANT: The user wrote in language code '{language}'. Respond in the same language throughout."
+        # Language instruction — always explicit so AI doesn't follow source language
+        lang_map = {"en": "English", "sv": "Swedish", "de": "German", "fr": "French",
+                    "es": "Spanish", "it": "Italian", "pt": "Portuguese", "nl": "Dutch",
+                    "pl": "Polish", "ru": "Russian", "zh": "Chinese", "ja": "Japanese",
+                    "ko": "Korean", "ar": "Arabic", "hi": "Hindi", "tr": "Turkish"}
+        lang_name = lang_map.get(language, "English")
+        lang_note = f"\nIMPORTANT: Respond ONLY in {lang_name}. Ignore the language of the sources — sources may be in any language but your answer must be in {lang_name}."
 
         # Comparison mode instruction
         if comparison:
