@@ -148,6 +148,11 @@ export default function Home() {
   const [gdriveToken, setGdriveToken]   = useState<string | null>(null);
   const [docInfo, setDocInfo]           = useState<{ filename: string; chars: number } | null>(null);
 
+  // Connector modal
+  const [showConnectorModal, setShowConnectorModal] = useState<null | "url" | "youtube">(null);
+  const [modalUrl, setModalUrl]         = useState("");
+  const [modalQuestion, setModalQuestion] = useState("");
+
   // Image results
   const [images, setImages]             = useState<{ url: string; title: string; page_url: string }[]>([]);
 
@@ -833,7 +838,7 @@ export default function Home() {
             {/* URL */}
             <button
               type="button"
-              onClick={() => { setConnector(connector === "url" ? null : "url"); setConnectorInput(""); }}
+              onClick={() => connector === "url" ? clearConnector() : setShowConnectorModal("url")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                 connector === "url"
                   ? "border-blue-400 bg-blue-50 text-blue-700 shadow-sm"
@@ -845,7 +850,7 @@ export default function Home() {
             {/* YouTube */}
             <button
               type="button"
-              onClick={() => { setConnector(connector === "youtube" ? null : "youtube"); setConnectorInput(""); }}
+              onClick={() => connector === "youtube" ? clearConnector() : setShowConnectorModal("youtube")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                 connector === "youtube"
                   ? "border-red-400 bg-red-50 text-red-700 shadow-sm"
@@ -857,14 +862,16 @@ export default function Home() {
             {/* Google Drive */}
             <button
               type="button"
-              onClick={gdriveToken ? () => setConnector("gdrive") : connectGDrive}
+              onClick={gdriveToken ? () => setConnector(connector === "gdrive" ? null : "gdrive") : connectGDrive}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                 connector === "gdrive"
                   ? "border-green-400 bg-green-50 text-green-700 shadow-sm"
+                  : gdriveToken
+                  ? "border-green-200 text-green-600 hover:border-green-400 hover:bg-green-50 hover:shadow-sm"
                   : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
               }`}
             >
-              🟢 {gdriveToken ? "Google Drive" : "Drive"}
+              {gdriveToken ? "✅ Drive" : "Drive"}
             </button>
 
             <div className="flex-1" />
@@ -910,17 +917,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Connector URL input */}
-          {(connector === "url" || connector === "youtube") && (
-            <div className="flex gap-2 mb-3">
-              <input
-                value={connectorInput}
-                onChange={(e) => setConnectorInput(e.target.value)}
-                placeholder={connector === "youtube" ? "Paste YouTube URL..." : "Paste any webpage URL..."}
-                className="flex-1 bg-white dark:bg-[#1a1d27] border border-gray-200 dark:border-[#2a2d3a] rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 dark:focus:ring-orange-900/30 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 text-gray-800 dark:text-[#e8eaf0] shadow-sm"
-              />
-            </div>
-          )}
 
           {/* Keyboard shortcut hint — only shown on homepage */}
           {!hasResults && !loading && (
@@ -1180,6 +1176,77 @@ export default function Home() {
         )}
 
       </main>
+
+      {/* ── CONNECTOR MODAL (YouTube / URL) ── */}
+      {showConnectorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setShowConnectorModal(null)}>
+          <div className="bg-white dark:bg-[#1a1d27] rounded-2xl shadow-2xl w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-[#2a2d3a] flex items-center justify-between">
+              <span className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2">
+                {showConnectorModal === "youtube" ? "▶ Analyze a YouTube Video" : "🔗 Analyze a Webpage"}
+              </span>
+              <button onClick={() => setShowConnectorModal(null)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 block">
+                  {showConnectorModal === "youtube" ? "YouTube URL" : "Webpage URL"}
+                </label>
+                <input
+                  autoFocus
+                  value={modalUrl}
+                  onChange={(e) => setModalUrl(e.target.value)}
+                  placeholder={showConnectorModal === "youtube" ? "https://youtube.com/watch?v=..." : "https://example.com/article..."}
+                  className="w-full bg-gray-50 dark:bg-[#0f1117] border border-gray-200 dark:border-[#2a2d3a] rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 dark:focus:ring-orange-900/30 transition-all placeholder:text-gray-400 text-gray-800 dark:text-gray-200"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 block">
+                  Your question
+                </label>
+                <input
+                  value={modalQuestion}
+                  onChange={(e) => setModalQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && modalUrl.trim() && modalQuestion.trim()) {
+                      setConnector(showConnectorModal);
+                      setConnectorInput(modalUrl.trim());
+                      setQuery(modalQuestion.trim());
+                      setShowConnectorModal(null);
+                      setModalUrl(""); setModalQuestion("");
+                      setTimeout(() => runSearch(modalQuestion.trim(), mode), 50);
+                    }
+                  }}
+                  placeholder={showConnectorModal === "youtube" ? "Summarize this video / What is it about? / ..." : "What does this page say about..."}
+                  className="w-full bg-gray-50 dark:bg-[#0f1117] border border-gray-200 dark:border-[#2a2d3a] rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 dark:focus:ring-orange-900/30 transition-all placeholder:text-gray-400 text-gray-800 dark:text-gray-200"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  if (!modalUrl.trim() || !modalQuestion.trim()) return;
+                  setConnector(showConnectorModal);
+                  setConnectorInput(modalUrl.trim());
+                  setQuery(modalQuestion.trim());
+                  setShowConnectorModal(null);
+                  setModalUrl(""); setModalQuestion("");
+                  setTimeout(() => runSearch(modalQuestion.trim(), mode), 50);
+                }}
+                disabled={!modalUrl.trim() || !modalQuestion.trim()}
+                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40 transition-all hover:opacity-90 hover:shadow-lg"
+              >
+                {showConnectorModal === "youtube" ? "Analyze Video" : "Analyze Page"}
+              </button>
+              <p className="text-[10px] text-gray-400 text-center">
+                {showConnectorModal === "youtube"
+                  ? "Works with any public YouTube video that has captions"
+                  : "Works with any public webpage — news, docs, articles"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── COLLECTIONS MODAL ── */}
       {showCollections && (
