@@ -600,6 +600,144 @@ async def test_groq():
         return {"ok": False, "error": str(e), "error_type": type(e).__name__, "key_prefix": key[:8] + "..."}
 
 
+@router.post("/github")
+async def analyze_github(
+    url: str = Form(...),
+    question: str = Form(...),
+    model: str = Form("llama-3.3-70b-versatile"),
+):
+    """Fetch a GitHub repo's README + key files and answer questions about it."""
+    import httpx
+
+    async def gh_stream():
+        # Parse owner/repo from URL
+        match = re.search(r"github\.com/([^/]+)/([^/?\s]+)", url)
+        if not match:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': 'Invalid GitHub URL — paste a URL like https://github.com/owner/repo'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        owner, repo = match.group(1), match.group(2).rstrip("/")
+        api_base = f"https://api.github.com/repos/{owner}/{repo}"
+        headers = {"Accept": "application/vnd.github+json", "User-Agent": "QUAERYX/1.0"}
+
+        content_parts = []
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                # Repo metadata
+                meta = (await client.get(api_base, headers=headers)).json()
+                desc = meta.get("description", "") or ""
+                stars = meta.get("stargazers_count", 0)
+                lang = meta.get("language", "")
+                content_parts.append(f"Repo: {owner}/{repo}\nDescription: {desc}\nLanguage: {lang}\nStars: {stars}\n")
+
+                # README
+                try:
+                    readme_resp = await client.get(f"{api_base}/readme", headers={**headers, "Accept": "application/vnd.github.raw"})
+                    if readme_resp.status_code == 200:
+                        content_parts.append("README:\n" + readme_resp.text[:6000])
+                except Exception:
+                    pass
+
+                # List root files
+                try:
+                    tree = (await client.get(f"{api_base}/contents", headers=headers)).json()
+                    if isinstance(tree, list):
+                        files = [f["name"] for f in tree if isinstance(f, dict)]
+                        content_parts.append("Root files: " + ", ".join(files[:30]))
+                except Exception:
+                    pass
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Could not fetch GitHub repo: {e}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        text = "\n\n".join(content_parts)
+        filename = f"GitHub · {owner}/{repo}"
+        yield f"data: {json.dumps({'type': 'doc_info', 'data': {'filename': filename, 'chars': len(text)}})}\n\n"
+        try:
+            async for chunk in reasoner.analyse_document(question, text, filename, model=model, stream=True):
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Analysis failed: {e}'})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(gh_stream(), media_type="text/event-stream")
+
+
+@router.post("/rss")
+async def analyze_rss(
+    url: str = Form(...),
+    question: str = Form(...),
+    model: str = Form("llama-3.3-70b-versatile"),
+):
+    """Fetch an RSS/Atom feed and answer questions about the latest articles."""
+    import httpx
+    import xml.etree.ElementTree as ET
+
+    async def rss_stream():
+        norm_url = url.strip()
+        if not norm_url.startswith(("http://", "https://")):
+            norm_url = "https://" + norm_url
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                resp = await client.get(norm_url, headers={"User-Agent": "QUAERYX/1.0"})
+                raw = resp.text
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Could not fetch feed: {e}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        # Parse RSS or Atom
+        try:
+            root = ET.fromstring(raw)
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Could not parse feed XML: {e}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        items = []
+        ns = {"atom": "http://www.w3.org/2005/Atom"}
+
+        # Try RSS 2.0
+        for item in root.findall(".//item")[:15]:
+            title = (item.findtext("title") or "").strip()
+            desc  = (item.findtext("description") or "").strip()[:400]
+            link  = (item.findtext("link") or "").strip()
+            date  = (item.findtext("pubDate") or "").strip()
+            if title:
+                items.append(f"- {title} ({date})\n  {desc}\n  {link}")
+
+        # Try Atom if no RSS items
+        if not items:
+            for entry in root.findall("atom:entry", ns)[:15]:
+                title = (entry.findtext("atom:title", namespaces=ns) or "").strip()
+                summary = (entry.findtext("atom:summary", namespaces=ns) or "").strip()[:400]
+                link_el = entry.find("atom:link", ns)
+                link = link_el.get("href", "") if link_el is not None else ""
+                if title:
+                    items.append(f"- {title}\n  {summary}\n  {link}")
+
+        if not items:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': 'No articles found in this feed.'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        feed_title = root.findtext("channel/title") or root.findtext("atom:title", namespaces=ns) or url
+        text = f"Feed: {feed_title}\n\nLatest articles:\n" + "\n\n".join(items)
+        filename = f"RSS · {feed_title[:50]}"
+        yield f"data: {json.dumps({'type': 'doc_info', 'data': {'filename': filename, 'chars': len(text)}})}\n\n"
+        try:
+            async for chunk in reasoner.analyse_document(question, text, filename, model=model, stream=True):
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'answer_chunk', 'data': f'Analysis failed: {e}'})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(rss_stream(), media_type="text/event-stream")
+
+
 @router.get("/stats")
 async def get_stats():
     """Analytics stats — total searches, popular queries, usage by mode/hour."""

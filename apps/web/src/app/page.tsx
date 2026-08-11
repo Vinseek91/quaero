@@ -9,7 +9,7 @@ import { oneLight, oneDark } from "react-syntax-highlighter/dist/esm/styles/pris
 const HISTORY_KEY = "quaeryx_history";
 
 type SearchMode = "general" | "academic" | "code" | "news" | "prediction";
-type ConnectorType = null | "url" | "youtube" | "gdrive";
+type ConnectorType = null | "url" | "youtube" | "gdrive" | "github" | "rss";
 
 interface SearchResult {
   title: string;
@@ -149,7 +149,7 @@ export default function Home() {
   const [docInfo, setDocInfo]           = useState<{ filename: string; chars: number } | null>(null);
 
   // Connector modal
-  const [showConnectorModal, setShowConnectorModal] = useState<null | "url" | "youtube">(null);
+  const [showConnectorModal, setShowConnectorModal] = useState<null | "url" | "youtube" | "github" | "rss">(null);
   const [modalUrl, setModalUrl]         = useState("");
   const [modalQuestion, setModalQuestion] = useState("");
 
@@ -389,6 +389,20 @@ export default function Home() {
       fd.append("model", selectedModel);
       endpoint = `${API}/api/gdrive/search`;
       fetchOptions = { method: "POST", body: fd, headers: { Authorization: `Bearer ${gdriveToken}` } };
+    } else if (connector === "github") {
+      const fd = new FormData();
+      fd.append("url", connectorInput || q);
+      fd.append("question", q);
+      fd.append("model", selectedModel);
+      endpoint = `${API}/api/github`;
+      fetchOptions = { method: "POST", body: fd };
+    } else if (connector === "rss") {
+      const fd = new FormData();
+      fd.append("url", connectorInput || q);
+      fd.append("question", q);
+      fd.append("model", selectedModel);
+      endpoint = `${API}/api/rss`;
+      fetchOptions = { method: "POST", body: fd };
     } else if (deepResearch) {
       endpoint = `${API}/api/deep-research?q=${encodeURIComponent(q)}&rounds=3`;
     } else {
@@ -737,6 +751,20 @@ export default function Home() {
                   <button type="button" onClick={clearConnector} className="ml-1 text-red-400 hover:text-red-700 font-bold">×</button>
                 </div>
               )}
+              {connector === "github" && (
+                <div className="flex items-center gap-2 bg-gray-900 border border-gray-700 text-white text-xs px-3 py-1.5 rounded-xl font-medium">
+                  <span>◈</span>
+                  <span className="max-w-[220px] truncate">{connectorInput}</span>
+                  <button type="button" onClick={clearConnector} className="ml-1 text-gray-400 hover:text-white font-bold">×</button>
+                </div>
+              )}
+              {connector === "rss" && (
+                <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 text-orange-700 text-xs px-3 py-1.5 rounded-xl font-medium">
+                  <span>◉</span>
+                  <span className="max-w-[220px] truncate">{connectorInput}</span>
+                  <button type="button" onClick={clearConnector} className="ml-1 text-orange-400 hover:text-orange-700 font-bold">×</button>
+                </div>
+              )}
               {connector === "gdrive" && gdriveToken && (
                 <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs px-3 py-1.5 rounded-xl font-medium">
                   <span>🟢</span>
@@ -873,6 +901,38 @@ export default function Home() {
             >
               {gdriveToken ? "✅ Drive" : "Drive"}
             </button>
+            {/* GitHub */}
+            <button
+              type="button"
+              onClick={() => connector === "github" ? clearConnector() : setShowConnectorModal("github")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                connector === "github"
+                  ? "border-gray-700 bg-gray-900 text-white shadow-sm"
+                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
+              }`}
+            >
+              ◈ GitHub
+            </button>
+            {/* RSS */}
+            <button
+              type="button"
+              onClick={() => connector === "rss" ? clearConnector() : setShowConnectorModal("rss")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                connector === "rss"
+                  ? "border-orange-400 bg-orange-50 text-orange-700 shadow-sm"
+                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
+              }`}
+            >
+              ◉ RSS
+            </button>
+            {/* All connectors link */}
+            <a
+              href="/connectors"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium border border-dashed border-gray-300 text-gray-400 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition-all"
+              title="View all connectors"
+            >
+              + More
+            </a>
 
             <div className="flex-1" />
 
@@ -1185,20 +1245,31 @@ export default function Home() {
             onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-100 dark:border-[#2a2d3a] flex items-center justify-between">
               <span className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-                {showConnectorModal === "youtube" ? "▶ Analyze a YouTube Video" : "🔗 Analyze a Webpage"}
+                {showConnectorModal === "youtube" ? "▶ Analyze a YouTube Video"
+                 : showConnectorModal === "github" ? "◈ Analyze a GitHub Repo"
+                 : showConnectorModal === "rss"    ? "◉ Read an RSS / Blog Feed"
+                 : "🔗 Analyze a Webpage"}
               </span>
               <button onClick={() => setShowConnectorModal(null)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div>
                 <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 block">
-                  {showConnectorModal === "youtube" ? "YouTube URL" : "Webpage URL"}
+                  {showConnectorModal === "youtube" ? "YouTube URL"
+                   : showConnectorModal === "github" ? "GitHub Repo URL"
+                   : showConnectorModal === "rss"    ? "RSS / Atom Feed URL"
+                   : "Webpage URL"}
                 </label>
                 <input
                   autoFocus
                   value={modalUrl}
                   onChange={(e) => setModalUrl(e.target.value)}
-                  placeholder={showConnectorModal === "youtube" ? "https://youtube.com/watch?v=..." : "https://example.com/article..."}
+                  placeholder={
+                    showConnectorModal === "youtube" ? "https://youtube.com/watch?v=..."
+                    : showConnectorModal === "github" ? "https://github.com/owner/repo"
+                    : showConnectorModal === "rss"    ? "https://hnrss.org/frontpage  or  https://blog.example.com/feed"
+                    : "https://example.com/article..."
+                  }
                   className="w-full bg-gray-50 dark:bg-[#0f1117] border border-gray-200 dark:border-[#2a2d3a] rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 dark:focus:ring-orange-900/30 transition-all placeholder:text-gray-400 text-gray-800 dark:text-gray-200"
                 />
               </div>
@@ -1219,7 +1290,12 @@ export default function Home() {
                       setTimeout(() => runSearch(modalQuestion.trim(), mode), 50);
                     }
                   }}
-                  placeholder={showConnectorModal === "youtube" ? "Summarize this video / What is it about? / ..." : "What does this page say about..."}
+                  placeholder={
+                    showConnectorModal === "youtube" ? "Summarize this video / What is it about? / ..."
+                    : showConnectorModal === "github" ? "What does this repo do? / How do I set it up? / ..."
+                    : showConnectorModal === "rss"    ? "What are the latest stories? / Summarize today's news..."
+                    : "What does this page say about..."
+                  }
                   className="w-full bg-gray-50 dark:bg-[#0f1117] border border-gray-200 dark:border-[#2a2d3a] rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 dark:focus:ring-orange-900/30 transition-all placeholder:text-gray-400 text-gray-800 dark:text-gray-200"
                 />
               </div>
@@ -1236,12 +1312,16 @@ export default function Home() {
                 disabled={!modalUrl.trim() || !modalQuestion.trim()}
                 className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40 transition-all hover:opacity-90 hover:shadow-lg"
               >
-                {showConnectorModal === "youtube" ? "Analyze Video" : "Analyze Page"}
+                {showConnectorModal === "youtube" ? "Analyze Video"
+                 : showConnectorModal === "github" ? "Analyze Repo"
+                 : showConnectorModal === "rss"    ? "Read Feed"
+                 : "Analyze Page"}
               </button>
               <p className="text-[10px] text-gray-400 text-center">
-                {showConnectorModal === "youtube"
-                  ? "Works with any public YouTube video that has captions"
-                  : "Works with any public webpage — news, docs, articles"}
+                {showConnectorModal === "youtube" ? "Works with any public YouTube video that has captions"
+                 : showConnectorModal === "github" ? "Works with any public GitHub repository"
+                 : showConnectorModal === "rss"    ? "Works with any RSS 2.0 or Atom feed URL"
+                 : "Works with any public webpage — news, docs, articles"}
               </p>
             </div>
           </div>
