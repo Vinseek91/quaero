@@ -84,10 +84,16 @@ const CONNECTORS = [
   { id: "whimsical",  name: "Whimsical",        icon: "W",  color: "bg-green-50 border-green-200", iconBg: "bg-green-100 text-green-700",  desc: "Read and analyze Whimsical diagrams and flowcharts.",           status: "soon", category: "Design"       },
   { id: "linear",     name: "Linear",           icon: "L",  color: "bg-indigo-50 border-indigo-200", iconBg: "bg-indigo-600 text-white",   desc: "Query issues, projects and cycles from your Linear workspace.",  status: "soon", category: "Productivity" },
   { id: "jira",       name: "Jira",             icon: "J",  color: "bg-blue-50 border-blue-200",  iconBg: "bg-blue-600 text-white",         desc: "Search and analyze Jira tickets, sprints and projects.",        status: "soon", category: "Productivity" },
-  { id: "confluence", name: "Confluence",       icon: "C",  color: "bg-blue-50 border-blue-200",  iconBg: "bg-blue-100 text-blue-700",     desc: "Search Confluence pages and spaces for documentation.",          status: "soon", category: "Productivity" },
+  { id: "confluence",  name: "Confluence",       icon: "C",  color: "bg-blue-50 border-blue-200",    iconBg: "bg-blue-100 text-blue-700",    desc: "Search Confluence pages and spaces for documentation.",         status: "soon", category: "Productivity"    },
+  { id: "monday",      name: "Monday.com",       icon: "M",  color: "bg-yellow-50 border-yellow-200", iconBg: "bg-yellow-400 text-white",    desc: "Query boards, items and automations from Monday.com.",          status: "soon", category: "Operations"      },
+  { id: "salesforce",  name: "Salesforce",       icon: "S",  color: "bg-blue-50 border-blue-200",    iconBg: "bg-blue-500 text-white",       desc: "Search CRM records, leads, deals and reports from Salesforce.", status: "soon", category: "Sales"           },
+  { id: "hubspot",     name: "HubSpot",          icon: "H",  color: "bg-orange-50 border-orange-200", iconBg: "bg-orange-500 text-white",   desc: "Access contacts, pipelines and analytics from HubSpot.",        status: "soon", category: "Sales"           },
+  { id: "airtable",    name: "Airtable",         icon: "A",  color: "bg-yellow-50 border-yellow-200", iconBg: "bg-yellow-100 text-yellow-700", desc: "Query Airtable bases, tables and views.",                     status: "soon", category: "Data"            },
+  { id: "tableau",     name: "Tableau",          icon: "T",  color: "bg-blue-50 border-blue-200",    iconBg: "bg-blue-600 text-white",       desc: "Analyze dashboards and data visualizations from Tableau.",      status: "soon", category: "Data"            },
+  { id: "snowflake",   name: "Snowflake",        icon: "❄", color: "bg-sky-50 border-sky-200",      iconBg: "bg-sky-100 text-sky-600",      desc: "Query data warehouses and analytics from Snowflake.",           status: "soon", category: "Data"            },
 ];
 
-const CATEGORIES = ["All", "Web", "Code", "News", "Files", "Email", "Productivity", "Messaging", "Social", "Design", "Finance", "Marketing", "Video"];
+const CATEGORIES = ["All", "Web", "Code", "News", "Files", "Email", "Productivity", "Messaging", "Social", "Design", "Finance", "Marketing", "Video", "Operations", "Sales", "Data"];
 
 export default function ConnectorsPage() {
   const router = useRouter();
