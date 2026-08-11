@@ -148,6 +148,8 @@ export default function Home() {
   const [gdriveToken, setGdriveToken]   = useState<string | null>(null);
   const [docInfo, setDocInfo]           = useState<{ filename: string; chars: number } | null>(null);
 
+  // Connector panel (Perplexity-style picker)
+  const [showConnectorPanel, setShowConnectorPanel] = useState(false);
   // Connector modal
   const [showConnectorModal, setShowConnectorModal] = useState<null | "url" | "youtube" | "github" | "rss">(null);
   const [modalUrl, setModalUrl]         = useState("");
@@ -290,6 +292,7 @@ export default function Home() {
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!(e.target as HTMLElement).closest("[data-model-menu]")) setShowModelMenu(false);
+      if (!(e.target as HTMLElement).closest("[data-connector-panel]")) setShowConnectorPanel(false);
       if (!(e.target as HTMLElement).closest("[data-more-menu]"))
         document.querySelector("[data-more-panel]")?.classList.add("hidden");
     };
@@ -861,78 +864,73 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Connector row — scrollable on mobile */}
-          <div className="flex gap-2 items-center mb-3 overflow-x-auto pb-1 scrollbar-hide">
-            {/* URL */}
-            <button
-              type="button"
-              onClick={() => connector === "url" ? clearConnector() : setShowConnectorModal("url")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                connector === "url"
-                  ? "border-blue-400 bg-blue-50 text-blue-700 shadow-sm"
-                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
-              }`}
-            >
-              🔗 URL
-            </button>
-            {/* YouTube */}
-            <button
-              type="button"
-              onClick={() => connector === "youtube" ? clearConnector() : setShowConnectorModal("youtube")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                connector === "youtube"
-                  ? "border-red-400 bg-red-50 text-red-700 shadow-sm"
-                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
-              }`}
-            >
-              ▶ YouTube
-            </button>
-            {/* Google Drive */}
-            <button
-              type="button"
-              onClick={gdriveToken ? () => setConnector(connector === "gdrive" ? null : "gdrive") : connectGDrive}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                connector === "gdrive"
-                  ? "border-green-400 bg-green-50 text-green-700 shadow-sm"
-                  : gdriveToken
-                  ? "border-green-200 text-green-600 hover:border-green-400 hover:bg-green-50 hover:shadow-sm"
-                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
-              }`}
-            >
-              {gdriveToken ? "✅ Drive" : "Drive"}
-            </button>
-            {/* GitHub */}
-            <button
-              type="button"
-              onClick={() => connector === "github" ? clearConnector() : setShowConnectorModal("github")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                connector === "github"
-                  ? "border-gray-700 bg-gray-900 text-white shadow-sm"
-                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
-              }`}
-            >
-              ◈ GitHub
-            </button>
-            {/* RSS */}
-            <button
-              type="button"
-              onClick={() => connector === "rss" ? clearConnector() : setShowConnectorModal("rss")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                connector === "rss"
-                  ? "border-orange-400 bg-orange-50 text-orange-700 shadow-sm"
-                  : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-white hover:shadow-sm"
-              }`}
-            >
-              ◉ RSS
-            </button>
-            {/* All connectors link */}
-            <a
-              href="/connectors"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium border border-dashed border-gray-300 text-gray-400 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition-all"
-              title="View all connectors"
-            >
-              + More
-            </a>
+          {/* Connector row — single + button like Perplexity */}
+          <div className="flex gap-2 items-center mb-3">
+            {/* + Connector picker button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowConnectorPanel((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                  connector
+                    ? "border-orange-400 bg-orange-50 text-orange-700 shadow-sm"
+                    : "border-gray-200 text-gray-500 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50 hover:shadow-sm"
+                }`}
+              >
+                <span className="text-base leading-none">+</span>
+                <span>{connector ? `Connected: ${connector}` : "Connectors"}</span>
+                {connector && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); clearConnector(); setShowConnectorPanel(false); }}
+                    className="ml-0.5 text-orange-400 hover:text-orange-700 font-bold text-sm leading-none"
+                  >×</button>
+                )}
+              </button>
+
+              {/* Perplexity-style connector panel */}
+              {showConnectorPanel && (
+                <div data-connector-panel className="absolute left-0 top-full mt-2 w-72 bg-white dark:bg-[#1a1d27] border border-gray-200 dark:border-[#2a2d3a] rounded-2xl shadow-2xl z-50 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100 dark:border-[#2a2d3a] flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-700 dark:text-gray-200">Add a source</span>
+                    <a href="/connectors" className="text-[10px] text-orange-500 hover:text-orange-700 font-semibold transition-colors">View all →</a>
+                  </div>
+                  <div className="p-2">
+                    {[
+                      { id: "url",     icon: "🔗", label: "Webpage",      desc: "Analyze any public URL" },
+                      { id: "youtube", icon: "▶",  label: "YouTube",      desc: "Summarize any video" },
+                      { id: "github",  icon: "◈",  label: "GitHub Repo",  desc: "Analyze public repositories" },
+                      { id: "rss",     icon: "◉",  label: "RSS / Blog",   desc: "Read any feed" },
+                      { id: "gdrive",  icon: "△",  label: "Google Drive", desc: gdriveToken ? "Connected" : "Connect your Drive" },
+                      { id: "upload",  icon: "📄", label: "File Upload",  desc: "PDF, TXT, CSV, Markdown" },
+                    ].map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setShowConnectorPanel(false);
+                          if (c.id === "upload") { fileInputRef.current?.click(); return; }
+                          if (c.id === "gdrive") { gdriveToken ? setConnector("gdrive") : connectGDrive(); return; }
+                          setShowConnectorModal(c.id as any);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all hover:bg-orange-50 dark:hover:bg-orange-900/20 group ${
+                          connector === c.id ? "bg-orange-50 dark:bg-orange-900/20" : ""
+                        }`}
+                      >
+                        <span className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-[#2a2d3a] flex items-center justify-center text-sm flex-shrink-0 group-hover:bg-orange-100 dark:group-hover:bg-orange-900/30 transition-colors">
+                          {c.icon}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-gray-800 dark:text-gray-200">{c.label}</div>
+                          <div className="text-[10px] text-gray-400 truncate">{c.desc}</div>
+                        </div>
+                        {connector === c.id && <span className="ml-auto text-orange-500 text-xs font-bold flex-shrink-0">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="flex-1" />
 
