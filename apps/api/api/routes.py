@@ -835,6 +835,35 @@ async def run_brand_scan(brand: str = Query(..., description="Brand name to scan
     }
 
 
+@router.get("/brand-monitor/ct-scan")
+async def ct_scan(
+    brand: str = Query(..., description="Brand name to scan CT logs for"),
+    days: int = Query(30, ge=1, le=90, description="How many days of CT logs to search"),
+):
+    """
+    Scan crt.sh Certificate Transparency logs for fake SSL certificates
+    impersonating a brand. Detects phishing sites within hours of creation —
+    worldwide, no API key required.
+    """
+    from packages.brandprotect.scanner import ct_scan_brand
+    result = await ct_scan_brand(brand, days)
+    return result
+
+
+@router.get("/brand-monitor/ct-scan-all")
+async def ct_scan_all(days: int = Query(7, ge=1, le=30)):
+    """Scan CT logs for ALL 45+ protected brands. May take 30-60s."""
+    from packages.brandprotect.scanner import ct_scan_all_brands
+    results = await ct_scan_all_brands(days)
+    total_threats = sum(r.get("threats_found", 0) for r in results)
+    return {
+        "brands_with_threats": len(results),
+        "total_threats": total_threats,
+        "days_scanned": days,
+        "results": results,
+    }
+
+
 @router.get("/stats")
 async def get_stats():
     """Analytics stats — total searches, popular queries, usage by mode/hour."""
