@@ -864,6 +864,16 @@ async def ct_scan_all(days: int = Query(7, ge=1, le=30)):
     }
 
 
+@router.get("/brand-monitor/ct-latest")
+async def ct_latest():
+    """
+    Return the cached result from the last automatic CT log scan.
+    The background scheduler runs every 6 hours — this endpoint is instant.
+    """
+    from main import ct_scan_cache
+    return ct_scan_cache
+
+
 @router.get("/stats")
 async def get_stats():
     """Analytics stats — total searches, popular queries, usage by mode/hour."""

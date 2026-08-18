@@ -3,10 +3,60 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from loguru import logger
+import asyncio
 import time
 
 from api.routes import router
 from core.config import settings
+
+# ── CT Log Scanner — shared cache ─────────────────────────────────────────────
+# Written by the background task, read by /api/brand-monitor/ct-latest
+ct_scan_cache: dict = {
+    "last_run": None,
+    "next_run": None,
+    "brands_with_threats": 0,
+    "total_threats": 0,
+    "results": [],   # list of brand scan results that had threats
+    "running": False,
+}
+
+_CT_INTERVAL_HOURS = 6
+
+
+async def _ct_background_loop():
+    """
+    Runs indefinitely. Every 6 hours:
+      1. Scans crt.sh for all 45+ protected brands
+      2. Updates ct_scan_cache with live results
+      3. Logs a summary
+    """
+    # Wait 90 seconds after startup before first scan so the server is fully ready
+    await asyncio.sleep(90)
+
+    while True:
+        ct_scan_cache["running"] = True
+        logger.info("Brand Sentinel: starting scheduled CT log scan for all brands...")
+        try:
+            from packages.brandprotect.scanner import ct_scan_all_brands
+            results = await ct_scan_all_brands(days=7)
+            total = sum(r.get("threats_found", 0) for r in results)
+            ct_scan_cache.update({
+                "last_run": time.strftime("%Y-%m-%d %H:%M UTC"),
+                "next_run": time.strftime(
+                    "%Y-%m-%d %H:%M UTC",
+                    time.gmtime(time.time() + _CT_INTERVAL_HOURS * 3600)
+                ),
+                "brands_with_threats": len(results),
+                "total_threats": total,
+                "results": results,
+                "running": False,
+            })
+            logger.info(f"Brand Sentinel CT scan complete — {total} threats across {len(results)} brands")
+        except Exception as e:
+            ct_scan_cache["running"] = False
+            logger.error(f"Brand Sentinel CT scan failed: {e}")
+
+        await asyncio.sleep(_CT_INTERVAL_HOURS * 3600)
 
 # ── Simple in-memory rate limiter ──────────────────────────────────────────
 _rate_store: dict[str, list[float]] = {}
@@ -32,7 +82,11 @@ async def rate_limit_middleware(request: Request, call_next):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("QUAERYX starting up...")
+    # Start the Brand Sentinel CT log scanner background loop
+    task = asyncio.create_task(_ct_background_loop())
+    logger.info(f"Brand Sentinel: CT scanner scheduled every {_CT_INTERVAL_HOURS}h (first run in 90s)")
     yield
+    task.cancel()
     logger.info("QUAERYX shutting down...")
 
 app = FastAPI(

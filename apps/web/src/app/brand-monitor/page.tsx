@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -13,6 +13,55 @@ const KNOWN_BRANDS = [
   "Cisco", "Accenture", "Capgemini", "PayPal", "Visa", "Mastercard", "Stripe",
   "eBay", "Alibaba", "Shopify", "Myntra",
 ];
+
+function ThreatCard({ t }: { t: any }) {
+  return (
+    <div className="border border-red-200 bg-red-50 rounded-2xl p-4 mb-3">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div>
+          <div className="text-sm font-black text-red-800 break-all">{t.domain}</div>
+          <div className="text-[10px] text-red-600 mt-0.5">
+            SSL issued: <span className="font-semibold">{t.issued_at}</span>
+            {t.cert_link && (
+              <> · <a href={t.cert_link} target="_blank" className="hover:underline font-semibold">View cert ↗</a></>
+            )}
+          </div>
+        </div>
+        <span className="shrink-0 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-bold">{t.risk_score}/100</span>
+      </div>
+      {t.issuer && (
+        <div className="text-[10px] text-gray-500 mb-2 truncate">
+          CA: {t.issuer.split(",")[0]?.replace("O=", "") || t.issuer}
+        </div>
+      )}
+      <div className="space-y-0.5 mb-3">
+        {t.reasons?.map((r: string, j: number) => (
+          <div key={j} className="text-xs text-red-600 flex gap-1"><span>⚡</span>{r}</div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <a href={t.url} target="_blank" rel="noopener noreferrer"
+          className="text-xs bg-white text-red-700 border border-red-300 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-50 transition-colors">
+          Visit (careful) ↗
+        </a>
+        <a href="https://safebrowsing.google.com/safebrowsing/report_phish/" target="_blank"
+          className="text-xs bg-white text-red-700 border border-red-300 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-50 transition-colors">
+          Report to Google
+        </a>
+        <a href="https://www.cert-in.org.in/" target="_blank"
+          className="text-xs bg-white text-red-700 border border-red-300 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-50 transition-colors">
+          CERT-In
+        </a>
+        {t.report_to && (
+          <a href={`mailto:${t.report_to}?subject=Phishing%20Alert%3A%20${encodeURIComponent(t.domain)}&body=Fake%20site%20detected%3A%20${encodeURIComponent(t.url)}%0ARisk%3A%20${t.risk_score}%2F100%0ASSL%20issued%3A%20${t.issued_at}%0A%0ADetected%20by%20QUAERYX%20Brand%20Sentinel%20via%20crt.sh%20CT%20logs.`}
+            className="text-xs bg-red-600 text-white border border-red-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-700 transition-colors">
+            Alert Brand Owner
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function BrandMonitorPage() {
   const [tab, setTab]               = useState<"check" | "monitor" | "scan" | "ct">("check");
@@ -33,6 +82,19 @@ export default function BrandMonitorPage() {
   const [ctDays, setCtDays]         = useState(30);
   const [ctResult, setCtResult]     = useState<any>(null);
   const [ctScanning, setCtScanning] = useState(false);
+
+  // Global CT cache — auto-loaded, updated every 6h by server
+  const [ctGlobal, setCtGlobal]     = useState<any>(null);
+  const [ctGlobalLoading, setCtGlobalLoading] = useState(true);
+
+  useEffect(() => {
+    // Load the latest global scan cache on page mount
+    fetch(`${API}/api/brand-monitor/ct-latest`)
+      .then((r) => r.json())
+      .then((d) => setCtGlobal(d))
+      .catch(() => setCtGlobal(null))
+      .finally(() => setCtGlobalLoading(false));
+  }, []);
 
   const checkUrl = async () => {
     if (!url.trim()) return;
@@ -319,19 +381,70 @@ export default function BrandMonitorPage() {
         {tab === "ct" && (
           <div>
             <h2 className="text-lg font-bold text-gray-900 mb-1">Certificate Transparency Log Scanner</h2>
-            <p className="text-sm text-gray-500 mb-1 leading-relaxed">
+            <p className="text-sm text-gray-500 mb-2 leading-relaxed">
               Every SSL certificate issued worldwide is logged publicly. We query{" "}
-              <span className="font-semibold text-gray-700">crt.sh</span> to find fake HTTPS sites
-              impersonating a brand — often within hours of their creation, anywhere on the planet.
+              <span className="font-semibold text-gray-700">crt.sh</span> automatically every 6 hours —
+              detecting fake HTTPS sites within hours of their creation, anywhere on the planet.
             </p>
-            <div className="flex items-center gap-2 text-[10px] text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2 mb-5">
-              <span>🟢</span>
-              <span>Free · No API key · Powered by{" "}
-                <a href="https://crt.sh" target="_blank" className="font-bold hover:underline">crt.sh</a>{" "}
-                (Let&apos;s Encrypt + all major CAs)
-              </span>
+
+            {/* Auto-scan status banner */}
+            <div className={`flex items-center gap-2 text-[11px] rounded-xl px-3 py-2 mb-5 border ${
+              ctGlobal?.running
+                ? "bg-yellow-50 border-yellow-200 text-yellow-700"
+                : ctGlobal?.last_run
+                  ? "bg-green-50 border-green-200 text-green-700"
+                  : "bg-gray-50 border-gray-200 text-gray-500"
+            }`}>
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ctGlobal?.running ? "bg-yellow-400 animate-pulse" : ctGlobal?.last_run ? "bg-green-500" : "bg-gray-300"}`}/>
+              {ctGlobalLoading ? (
+                <span>Loading scan status...</span>
+              ) : ctGlobal?.running ? (
+                <span>Auto-scan running now across all 45+ brands...</span>
+              ) : ctGlobal?.last_run ? (
+                <span>
+                  Auto-scan runs every 6h · Last: <strong>{ctGlobal.last_run}</strong> ·
+                  Next: <strong>{ctGlobal.next_run}</strong> ·
+                  <strong className="text-red-600"> {ctGlobal.total_threats} threats</strong> across <strong>{ctGlobal.brands_with_threats} brands</strong>
+                </span>
+              ) : (
+                <span>Auto-scan starts 90s after server boot · Powered by <a href="https://crt.sh" target="_blank" className="font-bold hover:underline">crt.sh</a> (free, no API key)</span>
+              )}
             </div>
 
+            {/* Global auto-scan results */}
+            {ctGlobal?.results?.length > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-sm font-bold text-gray-900">🚨 Latest auto-scan findings</span>
+                  <span className="text-[10px] bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded-full font-bold">
+                    {ctGlobal.total_threats} threats · last 7 days
+                  </span>
+                </div>
+                {ctGlobal.results.map((brandResult: any, bi: number) => (
+                  <div key={bi} className="mb-4">
+                    <div className="text-xs font-bold text-red-700 mb-2 flex items-center gap-2">
+                      <span>🏷️ {brandResult.brand}</span>
+                      <span className="text-gray-400 font-normal">({brandResult.threats_found} fake sites)</span>
+                    </div>
+                    {brandResult.threats?.slice(0, 3).map((t: any, i: number) => (
+                      <ThreatCard key={i} t={t} />
+                    ))}
+                    {brandResult.threats?.length > 3 && (
+                      <div className="text-xs text-gray-400 ml-2">+{brandResult.threats.length - 3} more — use Live Scan below for full details</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex-1 h-px bg-gray-200"/>
+              <span className="text-xs text-gray-400 font-semibold">Live Scan — specific brand</span>
+              <div className="flex-1 h-px bg-gray-200"/>
+            </div>
+
+            {/* Per-brand live scan */}
             <div className="flex flex-col sm:flex-row gap-2 mb-3">
               <select value={ctBrand} onChange={(e) => setCtBrand(e.target.value)}
                 className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 transition-all">
@@ -354,15 +467,15 @@ export default function BrandMonitorPage() {
                     <span className="animate-bounce" style={{animationDelay:"150ms"}}>·</span>
                     <span className="animate-bounce" style={{animationDelay:"300ms"}}>·</span>
                   </span>
-                ) : "Scan CT Logs"}
+                ) : "Scan Now"}
               </button>
             </div>
 
             {ctScanning && (
               <div className="text-center py-10 text-sm text-gray-500">
                 <div className="text-3xl mb-3 animate-pulse">🌐</div>
-                <div className="font-semibold text-gray-700 mb-1">Scanning crt.sh Certificate Transparency logs...</div>
-                <div className="text-xs text-gray-400">Checking every SSL cert issued in the last {ctDays} days worldwide. This may take 15–30 seconds.</div>
+                <div className="font-semibold text-gray-700 mb-1">Querying crt.sh Certificate Transparency logs...</div>
+                <div className="text-xs text-gray-400">Checking every SSL cert issued in the last {ctDays} days. This takes 15–30 seconds.</div>
               </div>
             )}
 
@@ -372,86 +485,27 @@ export default function BrandMonitorPage() {
                   <div className="text-red-600 bg-red-50 border border-red-200 rounded-xl p-4 text-sm">{ctResult.error}</div>
                 ) : (
                   <div>
-                    {/* Summary card */}
                     <div className={`flex items-center gap-4 mb-4 p-4 rounded-2xl border ${ctResult.threats_found > 0 ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
                       <span className="text-3xl">{ctResult.threats_found > 0 ? "🚨" : "✅"}</span>
                       <div className="flex-1">
                         <div className="font-bold text-gray-900">{ctResult.brand}</div>
                         <div className="text-xs text-gray-500">
-                          Official domain: <span className="font-semibold">{ctResult.official_domain}</span> ·
-                          Scanned last <span className="font-semibold">{ctResult.days_scanned} days</span> ·
-                          <span className="font-semibold"> {ctResult.certs_checked} certs</span> checked
+                          {ctResult.certs_checked} certs checked · last {ctResult.days_scanned} days · {ctResult.scanned_at}
                         </div>
-                        <div className="text-xs text-gray-400 mt-0.5">Scanned at {ctResult.scanned_at}</div>
                       </div>
                       <div className="text-right">
-                        <div className={`text-2xl font-black ${ctResult.threats_found > 0 ? "text-red-600" : "text-green-600"}`}>
-                          {ctResult.threats_found}
-                        </div>
-                        <div className="text-[10px] text-gray-500">threats found</div>
+                        <div className={`text-2xl font-black ${ctResult.threats_found > 0 ? "text-red-600" : "text-green-600"}`}>{ctResult.threats_found}</div>
+                        <div className="text-[10px] text-gray-500">threats</div>
                       </div>
                     </div>
-
                     {ctResult.threats_found === 0 && (
                       <div className="text-center py-8 text-green-600">
                         <div className="text-3xl mb-2">✅</div>
-                        <div className="font-semibold">No fake SSL certificates detected</div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          No new phishing sites found for {ctResult.brand} in the last {ctResult.days_scanned} days.<br/>
-                          Register for 24/7 monitoring to get alerted the moment one appears.
-                        </div>
+                        <div className="font-semibold">No fake SSL certs found</div>
+                        <div className="text-xs text-gray-400 mt-1">No new phishing sites for {ctResult.brand} in the last {ctResult.days_scanned} days.</div>
                       </div>
                     )}
-
-                    {ctResult.threats?.map((t: any, i: number) => (
-                      <div key={i} className="border border-red-200 bg-red-50 rounded-2xl p-4 mb-3">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div>
-                            <div className="text-sm font-black text-red-800 break-all">{t.domain}</div>
-                            <div className="text-[10px] text-red-600 mt-0.5">
-                              SSL issued: <span className="font-semibold">{t.issued_at}</span>
-                              {t.cert_link && (
-                                <> · <a href={t.cert_link} target="_blank" className="hover:underline font-semibold">View cert on crt.sh ↗</a></>
-                              )}
-                            </div>
-                          </div>
-                          <span className="shrink-0 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-bold">{t.risk_score}/100</span>
-                        </div>
-
-                        {t.issuer && (
-                          <div className="text-[10px] text-gray-500 mb-2 truncate">
-                            Issued by: {t.issuer.split(",")[0]?.replace("O=", "") || t.issuer}
-                          </div>
-                        )}
-
-                        <div className="space-y-0.5 mb-3">
-                          {t.reasons?.map((r: string, j: number) => (
-                            <div key={j} className="text-xs text-red-600 flex gap-1"><span>⚡</span>{r}</div>
-                          ))}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <a href={t.url} target="_blank" rel="noopener noreferrer"
-                            className="text-xs bg-white text-red-700 border border-red-300 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-50 transition-colors">
-                            Visit (careful) ↗
-                          </a>
-                          <a href="https://safebrowsing.google.com/safebrowsing/report_phish/" target="_blank"
-                            className="text-xs bg-white text-red-700 border border-red-300 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-50 transition-colors">
-                            Report to Google
-                          </a>
-                          <a href="https://www.cert-in.org.in/" target="_blank"
-                            className="text-xs bg-white text-red-700 border border-red-300 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-50 transition-colors">
-                            Report to CERT-In
-                          </a>
-                          {t.report_to && (
-                            <a href={`mailto:${t.report_to}?subject=Phishing%20Alert%3A%20${encodeURIComponent(t.domain)}&body=Fake%20site%20detected%3A%20${encodeURIComponent(t.url)}%0A%0ARisk%20Score%3A%20${t.risk_score}%2F100%0ASSl%20Certificate%20issued%3A%20${t.issued_at}%0A%0ADetected%20by%20QUAERYX%20Brand%20Sentinel%20via%20Certificate%20Transparency%20logs.`}
-                              className="text-xs bg-red-600 text-white border border-red-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-700 transition-colors">
-                              Alert Brand Owner
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                    {ctResult.threats?.map((t: any, i: number) => <ThreatCard key={i} t={t} />)}
                   </div>
                 )}
               </div>
