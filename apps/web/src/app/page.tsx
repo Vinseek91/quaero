@@ -193,6 +193,9 @@ export default function Home() {
   // Dark mode
   const [isDark, setIsDark]             = useState(false);
 
+  // Brand Sentinel toast
+  const [showSentinelToast, setShowSentinelToast] = useState(true);
+
   // Share
   const [copied, setCopied]             = useState(false);
 
@@ -576,6 +579,21 @@ export default function Home() {
       className={`min-h-screen bg-[#f8f9fc] dark:bg-[#0f1117] text-gray-800 dark:text-[#e8eaf0] transition-opacity duration-700 ${visible ? "opacity-100" : "opacity-0"}`}
       style={{ fontFamily: "'Inter', 'system-ui', sans-serif" }}
     >
+      {/* ── BRAND SENTINEL TOAST ── */}
+      {showSentinelToast && (
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 animate-bounce-once">
+          <div className="flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-gray-700 text-sm font-medium whitespace-nowrap">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"/>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"/>
+            </span>
+            🛡️ Brand Sentinel active — scanning for phishing &amp; fake sites
+            <a href="/brand-monitor" className="text-orange-400 hover:text-orange-300 font-bold text-xs ml-1 transition-colors">Check a URL →</a>
+            <button onClick={() => setShowSentinelToast(false)} className="text-gray-400 hover:text-white ml-2 text-lg leading-none font-bold">×</button>
+          </div>
+        </div>
+      )}
+
       {/* ── HEADER ── */}
       <header className="border-b border-gray-200/80 dark:border-[#2a2d3a]/80 px-6 py-3.5 flex items-center gap-4 bg-white/80 dark:bg-[#1a1d27]/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <button onClick={clearSearch} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity" title="Back to home">
@@ -595,6 +613,13 @@ export default function Home() {
           <span className="text-lg font-bold tracking-widest text-gray-900 dark:text-white">QUAERYX</span>
         </button>
         <span className="text-[11px] text-gray-400 dark:text-gray-500 tracking-widest hidden sm:block font-medium">THE NEXT GENERATION OF SEARCH</span>
+        <a href="/brand-monitor" className="hidden sm:flex items-center gap-1.5 bg-gray-900 dark:bg-gray-800 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg hover:bg-gray-700 transition-all">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"/>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"/>
+          </span>
+          🛡️ Brand Sentinel
+        </a>
         <div className="ml-auto flex items-center gap-2">
           {hasResults && (
             <>
@@ -677,7 +702,7 @@ export default function Home() {
             <p className="text-gray-400 text-xs tracking-[0.35em] mb-7 font-medium">
               LATIN: I SEEK · THE NEXT GENERATION OF SEARCH
             </p>
-            <div className="flex justify-center gap-8 text-xs text-gray-400 font-medium">
+            <div className="flex justify-center flex-wrap gap-4 text-xs text-gray-400 font-medium">
               <span>12 SOURCES</span>
               <span className="text-gray-200">·</span>
               <span>SWARM INTELLIGENCE</span>
@@ -686,6 +711,15 @@ export default function Home() {
               <span className="text-gray-200">·</span>
               <span>OPEN SOURCE</span>
             </div>
+            {/* Brand Sentinel feature badge */}
+            <a href="/brand-monitor" className="mt-5 inline-flex items-center gap-2 bg-gray-900 text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-gray-700 transition-all shadow-lg group">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"/>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"/>
+              </span>
+              🛡️ Brand Sentinel — Phishing Protection Active
+              <span className="text-gray-400 group-hover:text-orange-400 transition-colors">→</span>
+            </a>
 
             {/* Trending topics */}
             {trending.length > 0 && (
