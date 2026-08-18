@@ -52,6 +52,14 @@ def score_url(url: str) -> dict:
     if not url or not url.strip():
         return {"risk": 0, "brand": None, "reasons": [], "is_suspicious": False}
 
+    # Known safe domain patterns — subdomains of official sites are always legitimate
+    # e.g. career.infosys.com, mail.google.com, portal.hdfcbank.com
+    SAFE_SUBDOMAINS = {"career", "careers", "jobs", "mail", "email", "portal", "login",
+                       "account", "accounts", "secure", "pay", "payments", "shop", "store",
+                       "support", "help", "developer", "developers", "dev", "api", "docs",
+                       "blog", "news", "media", "investor", "investors", "ir", "corporate",
+                       "hr", "recruit", "recruitment", "campus", "apply", "id", "sso", "auth"}
+
     try:
         parsed = urlparse(url if url.startswith("http") else f"https://{url}")
         full_host = (parsed.hostname or "").lower().replace("www.", "")
@@ -67,14 +75,25 @@ def score_url(url: str) -> dict:
         official_core = _extract_domain(brand["domain"])
         brand_name = brand["name"]
 
-        # Skip if this IS the official domain
-        if full_host == brand["domain"] or full_host in brand.get("alt_domains", []):
+        # Build full list of safe domains for this brand
+        all_official = [brand["domain"]] + brand.get("alt_domains", [])
+
+        # Skip if this IS the official domain or an official alt domain
+        if full_host in all_official:
+            continue
+
+        # Skip if this is a LEGITIMATE SUBDOMAIN of an official domain
+        # e.g. career.infosys.com → ends with .infosys.com → SAFE
+        is_official_subdomain = any(
+            full_host.endswith("." + od) for od in all_official
+        )
+        if is_official_subdomain:
             continue
 
         risk = 0
         brand_reasons = []
 
-        # 1. Keyword in domain
+        # 1. Keyword in domain — only score if NOT a legitimate subdomain pattern
         for kw in brand["keywords"]:
             if kw in full_host:
                 risk += 40
@@ -91,6 +110,7 @@ def score_url(url: str) -> dict:
             brand_reasons.append(f"Domain {sim*100:.0f}% similar to {brand['domain']}")
 
         # 3. Official domain core IS a substring of the fake domain
+        # BUT not if the fake domain is just keyword.officialdomain.com (already caught above)
         if official_core in domain_core and domain_core != official_core:
             risk += 20
             brand_reasons.append(f"Official domain name embedded in fake domain")
