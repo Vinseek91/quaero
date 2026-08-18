@@ -1096,6 +1096,13 @@ export default function Home() {
                 </div>
                 <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-2 group-hover:text-gray-900 dark:group-hover:text-white transition-colors font-medium leading-snug mb-1">{r.title}</p>
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-relaxed">{r.snippet}</p>
+                {(r as any).is_suspicious && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-2 py-1 font-semibold">
+                    <span>🚨</span>
+                    <span>Possible fake — impersonates {(r as any).risk_brand} · Risk {(r as any).risk_score}/100</span>
+                    <a href="/brand-monitor" className="ml-auto underline hover:text-red-800" onClick={(e) => e.stopPropagation()}>Report</a>
+                  </div>
+                )}
               </a>
             ))}
           </div>
@@ -1440,6 +1447,7 @@ export default function Home() {
           <span>QUAERYX · Apache 2.0</span>
           <a href="/api-docs" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors hidden sm:inline">API Docs</a>
           <a href="/admin" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors hidden sm:inline">Analytics</a>
+          <a href="/brand-monitor" className="hover:text-red-500 dark:hover:text-red-400 transition-colors hidden sm:inline flex items-center gap-1">🛡️ Brand Sentinel</a>
         </span>
         <a href="https://github.com/Vinseek91/quaeryx" target="_blank" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors hidden sm:inline">github.com/Vinseek91/quaeryx</a>
       </footer>

@@ -133,6 +133,13 @@ async def search(
     # 2. Fan out search
     results = await searcher.search(q, mode=effective_mode, top_k=20)
 
+    # Score results for brand impersonation
+    try:
+        from packages.brandprotect.scanner import score_results
+        results = score_results(results)
+    except Exception as e:
+        logger.warning(f"Brand check failed: {e}")
+
     if not results:
         return {"query": q, "results": [], "answer": "No results found."}
 
@@ -736,6 +743,96 @@ async def analyze_rss(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(rss_stream(), media_type="text/event-stream")
+
+
+# ── BRAND SENTINEL ──────────────────────────────────────────────────────────
+
+@router.get("/brand-check")
+async def brand_check(url: str = Query(..., description="URL to check for brand impersonation")):
+    """Check a single URL for brand impersonation / phishing risk."""
+    from packages.brandprotect.scanner import score_url
+    result = score_url(url)
+    return result
+
+
+@router.post("/brand-check-batch")
+async def brand_check_batch(urls: list[str]):
+    """Check multiple URLs at once."""
+    from packages.brandprotect.scanner import score_url
+    return [score_url(u) for u in urls[:50]]
+
+
+@router.get("/brand-monitor/brands")
+async def list_protected_brands():
+    """Return the full list of protected brands."""
+    from packages.brandprotect.brands import PROTECTED_BRANDS
+    return {
+        "count": len(PROTECTED_BRANDS),
+        "brands": [{"name": b["name"], "domain": b["domain"]} for b in PROTECTED_BRANDS]
+    }
+
+
+# In-memory store for registered monitors (in production, use a database)
+_monitors: list[dict] = []
+
+@router.post("/brand-monitor/register")
+async def register_brand_monitor(
+    brand_name: str = Form(...),
+    email: str = Form(...),
+    your_domain: str = Form(...),
+):
+    """Register a brand for daily phishing monitoring. Alerts sent by email."""
+    import re as _re
+    if not _re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        return {"ok": False, "error": "Invalid email address"}
+    entry = {
+        "brand_name": brand_name,
+        "email": email,
+        "domain": your_domain,
+        "registered_at": time.strftime("%Y-%m-%d %H:%M UTC"),
+        "scans": 0,
+        "threats_found": 0,
+    }
+    _monitors.append(entry)
+    logger.info(f"Brand monitor registered: {brand_name} → {email}")
+    return {"ok": True, "message": f"Brand '{brand_name}' is now being monitored. Alerts will be sent to {email}."}
+
+
+@router.get("/brand-monitor/scan")
+async def run_brand_scan(brand: str = Query(..., description="Brand name to scan for fakes")):
+    """
+    Scan search engines for fake versions of a brand.
+    Returns list of suspicious URLs found.
+    """
+    from packages.brandprotect.scanner import score_url, get_brand_info
+    brand_info = get_brand_info(brand)
+    if not brand_info:
+        return {"ok": False, "error": f"Brand '{brand}' not in protected list"}
+
+    # Search for fake versions using our search aggregator
+    threats = []
+    for keyword in brand_info["keywords"]:
+        results = await searcher.search(f"{keyword} login account secure", mode="general", top_k=10)
+        for r in results:
+            scored = score_url(r["url"])
+            if scored["is_suspicious"] and scored["brand"] == brand_info["name"]:
+                threats.append({
+                    "url": r["url"],
+                    "title": r["title"],
+                    "risk_score": scored["risk"],
+                    "reasons": scored["reasons"],
+                    "report_to": brand_info["security_email"],
+                })
+
+    return {
+        "brand": brand_info["name"],
+        "official_domain": brand_info["domain"],
+        "threats_found": len(threats),
+        "threats": threats,
+        "report_to": brand_info["security_email"],
+        "cert_in": "https://www.cert-in.org.in/",
+        "google_safe_browsing": "https://safebrowsing.google.com/safebrowsing/report_phish/",
+    }
 
 
 @router.get("/stats")
