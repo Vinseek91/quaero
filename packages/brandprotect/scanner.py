@@ -183,94 +183,187 @@ def get_brand_info(brand_name: str) -> dict | None:
 
 # ── Certificate Transparency Scanner ─────────────────────────────────────────
 
-async def _fetch_crt(keyword: str, days: int = 30) -> list[dict]:
+def _parse_ct_date(s: str) -> datetime.datetime | None:
+    """Parse crt.sh date — handles both '2026-01-15 12:34:56' and '2026-01-15T12:34:56'."""
+    if not s:
+        return None
+    s = s[:19].replace("T", " ")
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return None
+
+
+async def _fetch_crt(keyword: str, days: int = 30) -> tuple[list[dict], str | None]:
     """
     Query crt.sh for SSL certs containing `keyword` issued in the last `days` days.
-    Returns list of {domain, issued_at, issuer, cert_id}.
+    Returns (list of {domain, issued_at, issuer, cert_id}, error_message | None).
+    Retries up to 3 times on 5xx errors.
     """
     import httpx
     url = f"https://crt.sh/?q=%25{keyword}%25&output=json"
     cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=days)
-    results = []
-    seen = set()
+    seen: set[str] = set()
+    results: list[dict] = []
+
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
+                r = await client.get(url, headers={"Accept": "application/json", "User-Agent": "QUAERYX-BrandSentinel/1.0"})
+                if r.status_code == 429:
+                    return [], "crt.sh rate limit hit — try again in a few minutes"
+                if r.status_code >= 500:
+                    if attempt < 2:
+                        await asyncio.sleep(3 * (attempt + 1))
+                        continue
+                    return [], f"crt.sh unavailable (HTTP {r.status_code}) — try again later"
+                if r.status_code != 200:
+                    return [], f"crt.sh returned HTTP {r.status_code}"
+
+                try:
+                    certs = r.json()
+                except Exception:
+                    return [], "crt.sh returned invalid JSON"
+
+                for cert in certs:
+                    name_value = cert.get("name_value", "")
+                    domains = [d.strip().lstrip("*.") for d in name_value.split("\n") if d.strip()]
+
+                    issued_at = _parse_ct_date(cert.get("not_before", ""))
+                    if not issued_at or issued_at < cutoff:
+                        continue
+
+                    for domain in domains:
+                        if domain in seen:
+                            continue
+                        seen.add(domain)
+                        results.append({
+                            "domain": domain,
+                            "issued_at": issued_at.strftime("%Y-%m-%d"),
+                            "issuer": cert.get("issuer_name", ""),
+                            "cert_id": cert.get("id", ""),
+                        })
+                return results, None  # success
+
+        except Exception as e:
+            if attempt < 2:
+                await asyncio.sleep(3 * (attempt + 1))
+                continue
+            logger.error(f"crt.sh fetch error for '{keyword}': {e}")
+            return [], f"crt.sh connection failed: {type(e).__name__}"
+
+    return [], "crt.sh: max retries exceeded"
+
+
+async def _fetch_certspotter(keyword: str, days: int = 30) -> tuple[list[dict], str | None]:
+    """
+    CertSpotter (SSLMate) fallback — free, no API key, different infrastructure from crt.sh.
+    Searches for certs issued for domains matching the keyword.
+    """
+    import httpx
+    # CertSpotter searches by registered domain — we use keyword as a domain stem
+    # Returns certs for that domain and all subdomains
+    url = f"https://api.certspotter.com/v1/issuances?domain={keyword}&include_subdomains=true&expand=dns_names&expand=issuer"
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=days)
+    seen: set[str] = set()
+    results: list[dict] = []
 
     try:
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-            r = await client.get(url, headers={"Accept": "application/json"})
+            r = await client.get(url, headers={"User-Agent": "QUAERYX-BrandSentinel/1.0"})
             if r.status_code != 200:
-                logger.warning(f"crt.sh returned {r.status_code} for keyword '{keyword}'")
-                return []
+                return [], f"CertSpotter returned HTTP {r.status_code}"
 
             certs = r.json()
             for cert in certs:
-                # Each cert may have multiple SANs separated by newlines
-                name_value = cert.get("name_value", "")
-                domains = [d.strip().lstrip("*.") for d in name_value.split("\n") if d.strip()]
-
-                # Parse issue date — crt.sh format: "2024-01-15T12:34:56"
+                dns_names = cert.get("dns_names", [])
                 not_before_str = cert.get("not_before", "")
-                try:
-                    issued_at = datetime.datetime.strptime(not_before_str[:19], "%Y-%m-%dT%H:%M:%S")
-                except Exception:
+                issued_at = _parse_ct_date(not_before_str)
+                if not issued_at or issued_at < cutoff:
                     continue
 
-                if issued_at < cutoff:
-                    continue  # Too old
+                issuer = cert.get("issuer", {})
+                issuer_name = issuer.get("friendly_name", "") if isinstance(issuer, dict) else str(issuer)
 
-                for domain in domains:
+                for domain in dns_names:
+                    domain = domain.lstrip("*.")
                     if domain in seen:
                         continue
                     seen.add(domain)
                     results.append({
                         "domain": domain,
                         "issued_at": issued_at.strftime("%Y-%m-%d"),
-                        "issuer": cert.get("issuer_name", ""),
+                        "issuer": issuer_name,
                         "cert_id": cert.get("id", ""),
                     })
+        return results, None
     except Exception as e:
-        logger.error(f"crt.sh fetch error for '{keyword}': {e}")
-
-    return results
+        return [], f"CertSpotter connection failed: {type(e).__name__}"
 
 
 async def ct_scan_brand(brand_name: str, days: int = 30) -> dict:
     """
     Scan Certificate Transparency logs for fake sites impersonating `brand_name`.
-
-    Queries crt.sh for every SSL cert issued in the last `days` days that
-    contains any of the brand's keywords in the domain. Scores each discovered
-    domain using score_url() and returns suspicious ones.
+    Primary source: crt.sh. Fallback: CertSpotter (SSLMate).
 
     Returns:
-        {brand, official_domain, days_scanned, certs_checked, threats_found, threats: [...]}
+        {brand, official_domain, days_scanned, certs_checked, threats_found,
+         threats, source, source_error}
     """
     brand_info = get_brand_info(brand_name)
     if not brand_info:
         return {"ok": False, "error": f"Brand '{brand_name}' not in protected list"}
 
     all_domains: list[dict] = []
-
-    # Fetch certs for each brand keyword in parallel
-    tasks = [_fetch_crt(kw, days) for kw in brand_info["keywords"]]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
     seen_domains: set[str] = set()
-    for batch in results:
-        if isinstance(batch, Exception):
+    source_used = "crt.sh"
+    source_errors: list[str] = []
+
+    # Try crt.sh first for each keyword in parallel
+    crt_tasks = [_fetch_crt(kw, days) for kw in brand_info["keywords"]]
+    crt_results = await asyncio.gather(*crt_tasks, return_exceptions=True)
+
+    crt_ok = False
+    for item in crt_results:
+        if isinstance(item, Exception):
+            source_errors.append(str(item))
             continue
+        batch, err = item
+        if err:
+            source_errors.append(f"crt.sh: {err}")
+        else:
+            crt_ok = True
         for entry in batch:
             d = entry["domain"]
             if d not in seen_domains:
                 seen_domains.add(d)
                 all_domains.append(entry)
 
+    # If crt.sh failed for all keywords, try CertSpotter as fallback
+    if not crt_ok and source_errors:
+        logger.warning(f"crt.sh failed for {brand_name}, trying CertSpotter fallback")
+        source_used = "CertSpotter (fallback)"
+        cs_tasks = [_fetch_certspotter(kw, days) for kw in brand_info["keywords"]]
+        cs_results = await asyncio.gather(*cs_tasks, return_exceptions=True)
+        for item in cs_results:
+            if isinstance(item, Exception):
+                continue
+            batch, err = item
+            if err:
+                source_errors.append(f"CertSpotter: {err}")
+                continue
+            for entry in batch:
+                d = entry["domain"]
+                if d not in seen_domains:
+                    seen_domains.add(d)
+                    all_domains.append(entry)
+
     # Score every discovered domain
     threats = []
     for entry in all_domains:
         scored = score_url(entry["domain"])
         if scored["is_suspicious"] and scored["brand"] == brand_info["name"]:
-            # Build crt.sh link for the certificate
-            cert_link = f"https://crt.sh/?id={entry['cert_id']}" if entry["cert_id"] else ""
+            cert_link = f"https://crt.sh/?id={entry['cert_id']}" if entry.get("cert_id") else ""
             threats.append({
                 "domain": entry["domain"],
                 "url": f"https://{entry['domain']}",
@@ -282,8 +375,14 @@ async def ct_scan_brand(brand_name: str, days: int = 30) -> dict:
                 "report_to": brand_info["security_email"],
             })
 
-    # Sort by risk score descending
     threats.sort(key=lambda x: x["risk_score"], reverse=True)
+
+    # Surface source errors clearly if no certs were found
+    source_error_msg = None
+    if len(all_domains) == 0 and source_errors:
+        # Deduplicate and pick the first unique error
+        unique_errors = list(dict.fromkeys(source_errors))
+        source_error_msg = unique_errors[0]
 
     return {
         "ok": True,
@@ -293,6 +392,8 @@ async def ct_scan_brand(brand_name: str, days: int = 30) -> dict:
         "certs_checked": len(all_domains),
         "threats_found": len(threats),
         "threats": threats,
+        "source": source_used,
+        "source_error": source_error_msg,
         "report_to": brand_info["security_email"],
         "cert_in": "https://www.cert-in.org.in/",
         "google_safe_browsing": "https://safebrowsing.google.com/safebrowsing/report_phish/",

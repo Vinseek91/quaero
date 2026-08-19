@@ -498,7 +498,17 @@ export default function BrandMonitorPage() {
                         <div className="text-[10px] text-gray-500">threats</div>
                       </div>
                     </div>
-                    {ctResult.threats_found === 0 && (
+                    {ctResult.source_error && (
+                      <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4 text-xs text-yellow-800">
+                        <span className="text-base flex-shrink-0">⚠️</span>
+                        <div>
+                          <div className="font-bold mb-0.5">CT log source temporarily unavailable</div>
+                          <div className="text-yellow-700">{ctResult.source_error}</div>
+                          <div className="mt-1 text-yellow-600">crt.sh is a free public service and occasionally goes down. Try again in a few minutes.</div>
+                        </div>
+                      </div>
+                    )}
+                    {ctResult.threats_found === 0 && !ctResult.source_error && (
                       <div className="text-center py-8 text-green-600">
                         <div className="text-3xl mb-2">✅</div>
                         <div className="font-semibold">No fake SSL certs found</div>

@@ -30,8 +30,8 @@ async def _ct_background_loop():
       2. Updates ct_scan_cache with live results
       3. Logs a summary
     """
-    # Wait 90 seconds after startup before first scan so the server is fully ready
-    await asyncio.sleep(90)
+    # Wait 15 seconds after startup before first scan so the server is fully ready
+    await asyncio.sleep(15)
 
     while True:
         ct_scan_cache["running"] = True

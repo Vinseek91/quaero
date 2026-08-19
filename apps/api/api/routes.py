@@ -864,6 +864,18 @@ async def ct_scan_all(days: int = Query(7, ge=1, le=30)):
     }
 
 
+@router.get("/brand-monitor/ct-status")
+async def ct_status():
+    """Quick health check — is crt.sh reachable right now?"""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get("https://crt.sh/?q=test&output=json", headers={"User-Agent": "QUAERYX-BrandSentinel/1.0"})
+            return {"crt_sh": "up" if r.status_code == 200 else f"down (HTTP {r.status_code})", "status_code": r.status_code}
+    except Exception as e:
+        return {"crt_sh": f"unreachable ({type(e).__name__})", "status_code": None}
+
+
 @router.get("/brand-monitor/ct-latest")
 async def ct_latest():
     """
