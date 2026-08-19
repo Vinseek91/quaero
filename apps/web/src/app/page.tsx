@@ -70,8 +70,9 @@ const GROQ_MODELS = [
   { id: "mixtral-8x7b-32768",      label: "Mixtral 8×7B",       desc: "32K context window",           provider: "Groq"   },
   { id: "gemma2-9b-it",            label: "Gemma 2 9B",         desc: "Google · Efficient",           provider: "Groq"   },
   { id: "llama3-70b-8192",         label: "Llama 3 70B",        desc: "Classic · Reliable",           provider: "Groq"   },
-  { id: "gemini-2.0-flash",        label: "Gemini 2.0 Flash",   desc: "Google · Fast & smart",        provider: "Gemini" },
-  { id: "gemini-1.5-flash",        label: "Gemini 1.5 Flash",   desc: "Google · 1M context",          provider: "Gemini" },
+  { id: "gemini-3.6-flash",        label: "Gemini 3.6 Flash",   desc: "Google · Latest & fastest",    provider: "Gemini" },
+  { id: "gemini-2.5-flash",        label: "Gemini 2.5 Flash",   desc: "Google · Fast & smart",        provider: "Gemini" },
+  { id: "gemini-2.5-pro",          label: "Gemini 2.5 Pro",     desc: "Google · Most capable",        provider: "Gemini" },
 ];
 
 function getFavicon(url: string, source: string): string {

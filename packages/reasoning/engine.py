@@ -81,11 +81,11 @@ Provide a comprehensive, cited answer. For each key claim, cite [source N].
 End with 3 follow-up research questions.{lang_note}"""
 
         # If user explicitly selected a Gemini model, route directly to Gemini
-        GEMINI_MODELS = {"gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"}
+        GEMINI_MODELS = {"gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"}
         is_gemini = model and model in GEMINI_MODELS
 
         groq_model   = model if (model and not is_gemini) else "llama-3.3-70b-versatile"
-        gemini_model = model if is_gemini else "gemini-2.0-flash"
+        gemini_model = model if is_gemini else "gemini-3.6-flash"
         local_model  = self._select_model(mode, len(results))
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
@@ -178,7 +178,7 @@ Question: {question}"""
     async def classify_intent(self, query: str) -> dict:
         """Classify query intent to route to right search providers."""
         client = self.groq_client or self.client
-        model = "llama-3.3-70b-versatile" if self.groq_client else "gemini-1.5-flash"
+        model = "llama-3.3-70b-versatile" if self.groq_client else "gemini-3.6-flash"
         try:
             resp = await client.chat.completions.create(
                 model=model,
@@ -201,7 +201,7 @@ Return JSON only: {{"mode": "...", "is_controversial": false, "needs_prediction"
         """Route to cheapest model that can handle the task."""
         if mode in ("academic", "code") or result_count > 15:
             return "claude-sonnet-4-6"
-        return "gemini-1.5-flash"
+        return "gemini-3.6-flash"
 
     def _format_results(self, results: list[dict]) -> str:
         lines = []
