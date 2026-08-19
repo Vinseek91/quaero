@@ -64,7 +64,7 @@ function ThreatCard({ t }: { t: any }) {
 }
 
 export default function BrandMonitorPage() {
-  const [tab, setTab]               = useState<"check" | "monitor" | "scan" | "ct">("check");
+  const [tab, setTab]               = useState<"check" | "monitor" | "scan" | "ct" | "feeds">("check");
   const [url, setUrl]               = useState("");
   const [checkResult, setCheckResult] = useState<any>(null);
   const [checking, setChecking]     = useState(false);
@@ -87,14 +87,36 @@ export default function BrandMonitorPage() {
   const [ctGlobal, setCtGlobal]     = useState<any>(null);
   const [ctGlobalLoading, setCtGlobalLoading] = useState(true);
 
+  // Live feeds state
+  const [feedBrand, setFeedBrand]   = useState("");
+  const [feedResult, setFeedResult] = useState<any>(null);
+  const [feedScanning, setFeedScanning] = useState(false);
+  const [feedsLatest, setFeedsLatest] = useState<any>(null);
+  const [streamAlerts, setStreamAlerts] = useState<any[]>([]);
+
   useEffect(() => {
-    // Load the latest global scan cache on page mount
+    // Load CT cache
     fetch(`${API}/api/brand-monitor/ct-latest`)
-      .then((r) => r.json())
-      .then((d) => setCtGlobal(d))
-      .catch(() => setCtGlobal(null))
+      .then((r) => r.json()).then(setCtGlobal).catch(() => null)
       .finally(() => setCtGlobalLoading(false));
+    // Load feeds cache
+    fetch(`${API}/api/brand-monitor/feeds-latest`)
+      .then((r) => r.json()).then(setFeedsLatest).catch(() => null);
+    // Load certstream alerts
+    fetch(`${API}/api/brand-monitor/stream-alerts`)
+      .then((r) => r.json()).then((d) => setStreamAlerts(d.alerts || [])).catch(() => null);
   }, []);
+
+  const runFeedScan = async () => {
+    if (!feedBrand) return;
+    setFeedScanning(true);
+    setFeedResult(null);
+    try {
+      const r = await fetch(`${API}/api/brand-monitor/feeds-scan?brand=${encodeURIComponent(feedBrand)}`);
+      setFeedResult(await r.json());
+    } catch { setFeedResult({ ok: false, error: "Scan failed" }); }
+    finally { setFeedScanning(false); }
+  };
 
   const checkUrl = async () => {
     if (!url.trim()) return;
@@ -204,6 +226,7 @@ export default function BrandMonitorPage() {
         {[
           { id: "check",   label: "🔍 Check a URL" },
           { id: "scan",    label: "🔎 Scan for Fakes" },
+          { id: "feeds",   label: "🔴 Live Feeds" },
           { id: "ct",      label: "🌐 CT Log Scanner" },
           { id: "monitor", label: "🔔 Register for Alerts" },
         ].map((t) => (
@@ -367,6 +390,181 @@ export default function BrandMonitorPage() {
                             className="text-xs bg-white text-red-700 border border-red-300 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-50 transition-colors">
                             Report to CERT-In
                           </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── LIVE FEEDS ── */}
+        {tab === "feeds" && (
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Live Phishing Feeds</h2>
+            <p className="text-sm text-gray-500 mb-2 leading-relaxed">
+              Confirmed phishing URLs from three community-verified sources, scanned every 6 hours.
+              These are <span className="font-semibold text-red-600">active threats</span> — not just suspicious, actually confirmed phishing.
+            </p>
+
+            {/* Source badges */}
+            <div className="flex flex-wrap gap-2 mb-5">
+              {[
+                { name: "OpenPhish", desc: "AI-detected phishing", color: "bg-red-50 border-red-200 text-red-700" },
+                { name: "URLhaus (abuse.ch)", desc: "Malware URLs", color: "bg-orange-50 border-orange-200 text-orange-700" },
+                { name: "PhishStats", desc: "Community scored", color: "bg-yellow-50 border-yellow-200 text-yellow-700" },
+                { name: "Certstream", desc: "Real-time certs", color: "bg-purple-50 border-purple-200 text-purple-700" },
+              ].map((s) => (
+                <div key={s.name} className={`flex items-center gap-1.5 text-[10px] font-semibold border rounded-xl px-2.5 py-1.5 ${s.color}`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse"/>
+                  <span>{s.name}</span>
+                  <span className="opacity-60">· {s.desc}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Auto-scan summary */}
+            {feedsLatest?.last_run && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mb-5 text-xs text-gray-600">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span>Last auto-scan: <strong>{feedsLatest.last_run}</strong> · Next: <strong>{feedsLatest.next_run}</strong></span>
+                  <span className={`font-bold ${feedsLatest.total_threats > 0 ? "text-red-600" : "text-green-600"}`}>
+                    {feedsLatest.total_threats} confirmed threats across {feedsLatest.brands_with_threats} brands
+                  </span>
+                </div>
+                {feedsLatest.feed_sizes && (
+                  <div className="mt-1 text-gray-400">
+                    Feed sizes — OpenPhish: {feedsLatest.feed_sizes.openphish?.toLocaleString()} · URLhaus: {feedsLatest.feed_sizes.urlhaus?.toLocaleString()} · PhishStats: {feedsLatest.feed_sizes.phishstats?.toLocaleString()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Certstream real-time alerts */}
+            {streamAlerts.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"/>
+                  <span className="text-sm font-bold text-gray-900">Certstream — Real-time alerts</span>
+                  <span className="text-[10px] bg-purple-100 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">{streamAlerts.length} caught</span>
+                </div>
+                {streamAlerts.slice(0, 5).map((a, i) => (
+                  <div key={i} className="border border-purple-200 bg-purple-50 rounded-xl p-3 mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-purple-800 break-all">{a.domain}</div>
+                      <div className="text-[10px] text-purple-600 mt-0.5">{a.brand} · Detected {a.detected_at}</div>
+                      <div className="text-[10px] text-purple-500">{a.reasons?.join(" · ")}</div>
+                    </div>
+                    <span className="shrink-0 text-xs bg-purple-600 text-white px-2 py-0.5 rounded-full font-bold">{a.risk_score}/100</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Auto-scan brand results */}
+            {feedsLatest?.results?.length > 0 && (
+              <div className="mb-6">
+                <div className="text-sm font-bold text-gray-900 mb-3">🚨 Confirmed threats by brand</div>
+                {feedsLatest.results.map((br: any, i: number) => (
+                  <div key={i} className="mb-4">
+                    <div className="text-xs font-bold text-red-700 mb-2">{br.brand} — {br.threats_found} confirmed phishing URLs</div>
+                    {br.threats?.slice(0, 3).map((t: any, j: number) => (
+                      <div key={j} className="border border-red-200 bg-red-50 rounded-xl p-3 mb-2 flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-bold text-red-800 break-all">{t.url}</div>
+                          <div className="text-[10px] text-red-600 mt-0.5">Source: {t.source}</div>
+                        </div>
+                        <span className="shrink-0 text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-bold">{t.risk_score}/100</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Manual per-brand scan */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px bg-gray-200"/>
+              <span className="text-xs text-gray-400 font-semibold whitespace-nowrap">Scan specific brand now</span>
+              <div className="flex-1 h-px bg-gray-200"/>
+            </div>
+
+            <div className="flex gap-2 mb-4">
+              <select value={feedBrand} onChange={(e) => setFeedBrand(e.target.value)}
+                className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 transition-all">
+                <option value="">Select a brand...</option>
+                {KNOWN_BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+              <button onClick={runFeedScan} disabled={feedScanning || !feedBrand}
+                className="bg-gradient-to-r from-red-500 to-orange-500 text-white font-bold px-5 py-3 rounded-xl text-sm disabled:opacity-50 hover:opacity-90 transition-all shadow-md whitespace-nowrap">
+                {feedScanning ? (
+                  <span className="flex items-center gap-1">
+                    <span className="animate-bounce">·</span><span className="animate-bounce" style={{animationDelay:"150ms"}}>·</span><span className="animate-bounce" style={{animationDelay:"300ms"}}>·</span>
+                  </span>
+                ) : "Scan Feeds"}
+              </button>
+            </div>
+
+            {feedScanning && (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                <div className="text-3xl mb-2 animate-pulse">🔴</div>
+                <div className="font-semibold">Scanning OpenPhish · URLhaus · PhishStats...</div>
+                <div className="text-xs text-gray-400 mt-1">Checking {feedBrand} against millions of confirmed phishing URLs</div>
+              </div>
+            )}
+
+            {feedResult && !feedScanning && (
+              <div>
+                {!feedResult.ok ? (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">{feedResult.error}</div>
+                ) : (
+                  <div>
+                    <div className={`flex items-center gap-4 p-4 rounded-2xl border mb-4 ${feedResult.threats_found > 0 ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
+                      <span className="text-3xl">{feedResult.threats_found > 0 ? "🚨" : "✅"}</span>
+                      <div className="flex-1">
+                        <div className="font-bold text-gray-900">{feedResult.brand}</div>
+                        <div className="text-xs text-gray-500">
+                          Checked {feedResult.feed_sizes?.openphish?.toLocaleString()} OpenPhish + {feedResult.feed_sizes?.urlhaus?.toLocaleString()} URLhaus + {feedResult.feed_sizes?.phishstats?.toLocaleString()} PhishStats URLs
+                        </div>
+                        <div className="text-xs text-gray-400">{feedResult.scanned_at}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-2xl font-black ${feedResult.threats_found > 0 ? "text-red-600" : "text-green-600"}`}>{feedResult.threats_found}</div>
+                        <div className="text-[10px] text-gray-500">confirmed</div>
+                      </div>
+                    </div>
+                    {feedResult.threats_found === 0 && (
+                      <div className="text-center py-6 text-green-600">
+                        <div className="text-3xl mb-2">✅</div>
+                        <div className="font-semibold">No confirmed phishing URLs found</div>
+                        <div className="text-xs text-gray-400 mt-1">Not currently in OpenPhish, URLhaus, or PhishStats</div>
+                      </div>
+                    )}
+                    {feedResult.threats?.map((t: any, i: number) => (
+                      <div key={i} className="border border-red-200 bg-red-50 rounded-2xl p-4 mb-3">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-black text-red-800 break-all">{t.url}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] bg-red-100 border border-red-300 text-red-700 px-2 py-0.5 rounded-full font-bold">
+                                {t.source}
+                              </span>
+                              <span className="text-[10px] text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full font-bold">✓ Confirmed phishing</span>
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-bold">{t.risk_score}/100</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          <a href="https://safebrowsing.google.com/safebrowsing/report_phish/" target="_blank"
+                            className="text-xs bg-white text-red-700 border border-red-300 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-50">Report to Google</a>
+                          <a href="https://www.cert-in.org.in/" target="_blank"
+                            className="text-xs bg-white text-red-700 border border-red-300 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-50">CERT-In</a>
+                          {t.report_to && (
+                            <a href={`mailto:${t.report_to}?subject=Confirmed%20Phishing%3A%20${encodeURIComponent(t.url)}&body=Confirmed%20phishing%20URL%20found%20in%20${t.source}%3A%0A${encodeURIComponent(t.url)}%0A%0ADetected%20by%20QUAERYX%20Brand%20Sentinel.`}
+                              className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-red-700">Alert Brand Owner</a>
+                          )}
                         </div>
                       </div>
                     ))}

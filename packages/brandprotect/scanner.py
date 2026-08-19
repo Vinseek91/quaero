@@ -416,3 +416,218 @@ async def ct_scan_all_brands(days: int = 7) -> list[dict]:
         if r.get("ok") and r.get("threats_found", 0) > 0:
             active_threats.append(r)
     return active_threats
+
+
+# ── Phishing Feed Scanners ────────────────────────────────────────────────────
+# OpenPhish, URLhaus, PhishStats — all free, no API key required.
+# These feeds contain CONFIRMED phishing/malware URLs, not just suspicious ones.
+# Feeds are downloaded and cached globally for 6 hours, then filtered per brand.
+
+_feed_cache: dict = {
+    "openphish": {"urls": [], "fetched_at": 0},
+    "urlhaus":   {"urls": [], "fetched_at": 0},
+    "phishstats": {"urls": [], "fetched_at": 0},
+}
+_FEED_TTL = 6 * 3600  # 6 hours
+
+
+async def _get_openphish() -> list[str]:
+    """Download OpenPhish feed (confirmed phishing URLs). Cached 6h."""
+    import httpx, time as _time
+    cache = _feed_cache["openphish"]
+    if _time.time() - cache["fetched_at"] < _FEED_TTL and cache["urls"]:
+        return cache["urls"]
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.get("https://openphish.com/feed.txt")
+            if r.status_code == 200:
+                urls = [u.strip() for u in r.text.splitlines() if u.strip().startswith("http")]
+                cache["urls"] = urls
+                cache["fetched_at"] = _time.time()
+                logger.info(f"OpenPhish: loaded {len(urls)} phishing URLs")
+                return urls
+    except Exception as e:
+        logger.warning(f"OpenPhish fetch failed: {e}")
+    return cache["urls"]  # return stale if fetch fails
+
+
+async def _get_urlhaus() -> list[str]:
+    """Download URLhaus recent malware feed (abuse.ch). Cached 6h."""
+    import httpx, time as _time, gzip
+    cache = _feed_cache["urlhaus"]
+    if _time.time() - cache["fetched_at"] < _FEED_TTL and cache["urls"]:
+        return cache["urls"]
+    try:
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            # CSV format: id,dateadded,url,url_status,last_online,threat,tags,urlhaus_link,reporter
+            r = await client.get("https://urlhaus.abuse.ch/downloads/csv_recent/",
+                                 headers={"User-Agent": "QUAERYX-BrandSentinel/1.0"})
+            if r.status_code == 200:
+                urls = []
+                for line in r.text.splitlines():
+                    if line.startswith("#") or not line.strip():
+                        continue
+                    parts = line.split('","')
+                    if len(parts) >= 3:
+                        url = parts[2].strip('"')
+                        if url.startswith("http"):
+                            urls.append(url)
+                cache["urls"] = urls
+                cache["fetched_at"] = _time.time()
+                logger.info(f"URLhaus: loaded {len(urls)} malware URLs")
+                return urls
+    except Exception as e:
+        logger.warning(f"URLhaus fetch failed: {e}")
+    return cache["urls"]
+
+
+async def _get_phishstats() -> list[str]:
+    """Download PhishStats feed (phish_score.csv). Cached 6h."""
+    import httpx, time as _time
+    cache = _feed_cache["phishstats"]
+    if _time.time() - cache["fetched_at"] < _FEED_TTL and cache["urls"]:
+        return cache["urls"]
+    try:
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            r = await client.get("https://phishstats.info/phish_score.csv",
+                                 headers={"User-Agent": "QUAERYX-BrandSentinel/1.0"})
+            if r.status_code == 200:
+                urls = []
+                for line in r.text.splitlines()[1:]:  # skip header
+                    parts = line.split(",")
+                    if len(parts) >= 2:
+                        url = parts[1].strip().strip('"')
+                        if url.startswith("http"):
+                            urls.append(url)
+                cache["urls"] = urls
+                cache["fetched_at"] = _time.time()
+                logger.info(f"PhishStats: loaded {len(urls)} phishing URLs")
+                return urls
+    except Exception as e:
+        logger.warning(f"PhishStats fetch failed: {e}")
+    return cache["urls"]
+
+
+def _match_brand_in_url(url: str, brand_info: dict) -> bool:
+    """Return True if any brand keyword appears in the URL."""
+    url_lower = url.lower()
+    return any(kw in url_lower for kw in brand_info["keywords"])
+
+
+async def feeds_scan_brand(brand_name: str) -> dict:
+    """
+    Scan OpenPhish, URLhaus, and PhishStats feeds for confirmed phishing URLs
+    impersonating brand_name. Returns verified threats — not just suspicious, CONFIRMED.
+    """
+    brand_info = get_brand_info(brand_name)
+    if not brand_info:
+        return {"ok": False, "error": f"Brand '{brand_name}' not in protected list"}
+
+    # Download all three feeds in parallel
+    openphish_urls, urlhaus_urls, phishstats_urls = await asyncio.gather(
+        _get_openphish(), _get_urlhaus(), _get_phishstats(),
+        return_exceptions=True,
+    )
+    if isinstance(openphish_urls, Exception):  openphish_urls = []
+    if isinstance(urlhaus_urls, Exception):    urlhaus_urls = []
+    if isinstance(phishstats_urls, Exception): phishstats_urls = []
+
+    threats = []
+    seen_urls: set[str] = set()
+
+    def _process(urls: list[str], source: str):
+        for url in urls:
+            if url in seen_urls:
+                continue
+            if not _match_brand_in_url(url, brand_info):
+                continue
+            # Skip official domains
+            try:
+                from urllib.parse import urlparse
+                host = urlparse(url).hostname or ""
+                host = host.lower().replace("www.", "")
+                all_official = [brand_info["domain"]] + brand_info.get("alt_domains", [])
+                if host in all_official or any(host.endswith("." + od) for od in all_official):
+                    continue
+            except Exception:
+                pass
+            seen_urls.add(url)
+            scored = score_url(url)
+            threats.append({
+                "url": url,
+                "domain": url.split("/")[2] if "/" in url else url,
+                "risk_score": scored["risk"],
+                "reasons": scored["reasons"],
+                "source": source,
+                "confirmed": True,  # these come from verified phishing feeds
+                "report_to": brand_info["security_email"],
+            })
+
+    _process(openphish_urls,  "OpenPhish")
+    _process(urlhaus_urls,    "URLhaus (abuse.ch)")
+    _process(phishstats_urls, "PhishStats")
+
+    threats.sort(key=lambda x: x["risk_score"], reverse=True)
+
+    return {
+        "ok": True,
+        "brand": brand_info["name"],
+        "official_domain": brand_info["domain"],
+        "threats_found": len(threats),
+        "threats": threats,
+        "sources_checked": ["OpenPhish", "URLhaus (abuse.ch)", "PhishStats"],
+        "feed_sizes": {
+            "openphish": len(openphish_urls),
+            "urlhaus": len(urlhaus_urls),
+            "phishstats": len(phishstats_urls),
+        },
+        "report_to": brand_info["security_email"],
+        "scanned_at": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+    }
+
+
+async def feeds_scan_all_brands() -> dict:
+    """Scan all 45+ brands against all three phishing feeds simultaneously."""
+    # Download feeds once, then filter per brand
+    openphish_urls, urlhaus_urls, phishstats_urls = await asyncio.gather(
+        _get_openphish(), _get_urlhaus(), _get_phishstats(),
+        return_exceptions=True,
+    )
+    if isinstance(openphish_urls, Exception):  openphish_urls = []
+    if isinstance(urlhaus_urls, Exception):    urlhaus_urls = []
+    if isinstance(phishstats_urls, Exception): phishstats_urls = []
+
+    all_threats = []
+    for brand in PROTECTED_BRANDS:
+        brand_threats = []
+        seen: set[str] = set()
+        for url, source in [
+            *[(u, "OpenPhish") for u in openphish_urls],
+            *[(u, "URLhaus (abuse.ch)") for u in urlhaus_urls],
+            *[(u, "PhishStats") for u in phishstats_urls],
+        ]:
+            if url in seen or not _match_brand_in_url(url, brand):
+                continue
+            seen.add(url)
+            scored = score_url(url)
+            if scored["is_suspicious"]:
+                brand_threats.append({"url": url, "source": source, "risk_score": scored["risk"]})
+
+        if brand_threats:
+            all_threats.append({
+                "brand": brand["name"],
+                "threats_found": len(brand_threats),
+                "threats": sorted(brand_threats, key=lambda x: x["risk_score"], reverse=True),
+            })
+
+    return {
+        "brands_with_threats": len(all_threats),
+        "total_threats": sum(b["threats_found"] for b in all_threats),
+        "results": all_threats,
+        "feed_sizes": {
+            "openphish": len(openphish_urls),
+            "urlhaus": len(urlhaus_urls),
+            "phishstats": len(phishstats_urls),
+        },
+        "scanned_at": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+    }

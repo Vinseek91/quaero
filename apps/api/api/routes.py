@@ -878,12 +878,43 @@ async def ct_status():
 
 @router.get("/brand-monitor/ct-latest")
 async def ct_latest():
-    """
-    Return the cached result from the last automatic CT log scan.
-    The background scheduler runs every 6 hours — this endpoint is instant.
-    """
+    """Return cached result from the last automatic CT log scan (runs every 6h)."""
     from main import ct_scan_cache
     return ct_scan_cache
+
+
+@router.get("/brand-monitor/feeds-scan")
+async def feeds_scan(brand: str = Query(..., description="Brand name to scan in phishing feeds")):
+    """
+    Scan OpenPhish, URLhaus, and PhishStats feeds for confirmed phishing URLs.
+    These are VERIFIED phishing sites — not just suspicious, actually confirmed.
+    Feeds are cached 6h so response is fast after first call.
+    """
+    from packages.brandprotect.scanner import feeds_scan_brand
+    return await feeds_scan_brand(brand)
+
+
+@router.get("/brand-monitor/feeds-latest")
+async def feeds_latest():
+    """Return cached result from the last automatic feeds scan (runs every 6h)."""
+    from main import feeds_scan_cache
+    return feeds_scan_cache
+
+
+@router.get("/brand-monitor/stream-alerts")
+async def stream_alerts(brand: str | None = Query(None, description="Filter by brand name")):
+    """
+    Return real-time Certstream alerts — fake SSL certs caught the moment they are issued.
+    Up to 200 most recent alerts kept in memory.
+    """
+    from main import stream_alerts as _alerts
+    alerts = list(_alerts)
+    if brand:
+        alerts = [a for a in alerts if brand.lower() in a["brand"].lower()]
+    return {
+        "count": len(alerts),
+        "alerts": alerts,
+    }
 
 
 @router.get("/stats")

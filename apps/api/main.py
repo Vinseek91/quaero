@@ -5,22 +5,128 @@ from contextlib import asynccontextmanager
 from loguru import logger
 import asyncio
 import time
+import collections
 
 from api.routes import router
 from core.config import settings
 
 # ── CT Log Scanner — shared cache ─────────────────────────────────────────────
-# Written by the background task, read by /api/brand-monitor/ct-latest
 ct_scan_cache: dict = {
     "last_run": None,
     "next_run": None,
     "brands_with_threats": 0,
     "total_threats": 0,
-    "results": [],   # list of brand scan results that had threats
+    "results": [],
     "running": False,
 }
 
+# ── Phishing Feeds — shared cache ─────────────────────────────────────────────
+feeds_scan_cache: dict = {
+    "last_run": None,
+    "next_run": None,
+    "brands_with_threats": 0,
+    "total_threats": 0,
+    "results": [],
+    "feed_sizes": {},
+    "running": False,
+}
+
+# ── Certstream — rolling alert buffer (last 200 matches) ──────────────────────
+# Each entry: {domain, brand, risk_score, reasons, detected_at}
+stream_alerts: collections.deque = collections.deque(maxlen=200)
+
 _CT_INTERVAL_HOURS = 6
+_FEEDS_INTERVAL_HOURS = 6
+
+
+async def _feeds_background_loop():
+    """
+    Every 6 hours: download OpenPhish + URLhaus + PhishStats feeds,
+    scan all 45+ brands, cache results in feeds_scan_cache.
+    """
+    await asyncio.sleep(20)  # slight offset from CT loop
+    while True:
+        feeds_scan_cache["running"] = True
+        logger.info("Brand Sentinel: starting scheduled feeds scan (OpenPhish + URLhaus + PhishStats)...")
+        try:
+            from packages.brandprotect.scanner import feeds_scan_all_brands
+            result = await feeds_scan_all_brands()
+            feeds_scan_cache.update({
+                "last_run": time.strftime("%Y-%m-%d %H:%M UTC"),
+                "next_run": time.strftime(
+                    "%Y-%m-%d %H:%M UTC",
+                    time.gmtime(time.time() + _FEEDS_INTERVAL_HOURS * 3600)
+                ),
+                "brands_with_threats": result.get("brands_with_threats", 0),
+                "total_threats": result.get("total_threats", 0),
+                "results": result.get("results", []),
+                "feed_sizes": result.get("feed_sizes", {}),
+                "running": False,
+            })
+            logger.info(f"Feeds scan complete — {result.get('total_threats', 0)} threats across {result.get('brands_with_threats', 0)} brands")
+        except Exception as e:
+            feeds_scan_cache["running"] = False
+            logger.error(f"Feeds scan failed: {e}")
+
+        await asyncio.sleep(_FEEDS_INTERVAL_HOURS * 3600)
+
+
+async def _certstream_listener():
+    """
+    Connect to certstream (wss://certstream.calidog.io) and watch every SSL cert
+    issued globally in real-time. When a domain contains a brand keyword AND scores
+    as suspicious, add it to stream_alerts immediately.
+    """
+    import json as _json
+    import websockets
+    from packages.brandprotect.scanner import score_url, PROTECTED_BRANDS
+
+    # Build keyword → brand_name lookup for fast matching
+    kw_map: dict[str, str] = {}
+    for brand in PROTECTED_BRANDS:
+        for kw in brand["keywords"]:
+            kw_map[kw] = brand["name"]
+
+    uri = "wss://certstream.calidog.io/"
+    backoff = 5
+
+    while True:
+        try:
+            logger.info("Certstream: connecting to live CT log stream...")
+            async with websockets.connect(uri, ping_interval=30, ping_timeout=10) as ws:
+                logger.info("Certstream: connected — watching live cert issuances")
+                backoff = 5  # reset on successful connect
+                async for raw in ws:
+                    try:
+                        msg = _json.loads(raw)
+                        if msg.get("message_type") != "certificate_update":
+                            continue
+                        leaf = msg.get("data", {}).get("leaf_cert", {})
+                        domains = leaf.get("all_domains", [])
+                        for domain in domains:
+                            domain = domain.lower().lstrip("*.")
+                            for kw, brand_name in kw_map.items():
+                                if kw in domain:
+                                    scored = score_url(domain)
+                                    if scored["is_suspicious"] and scored.get("brand") == brand_name:
+                                        alert = {
+                                            "domain": domain,
+                                            "url": f"https://{domain}",
+                                            "brand": brand_name,
+                                            "risk_score": scored["risk"],
+                                            "reasons": scored["reasons"],
+                                            "detected_at": time.strftime("%Y-%m-%d %H:%M UTC"),
+                                            "source": "Certstream (real-time)",
+                                        }
+                                        stream_alerts.appendleft(alert)
+                                        logger.warning(f"Certstream ALERT: {domain} → {brand_name} ({scored['risk']}/100)")
+                                    break  # matched one keyword, no need to check more
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.warning(f"Certstream disconnected: {e} — reconnecting in {backoff}s")
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 120)  # exponential backoff, max 2 min
 
 
 async def _ct_background_loop():
@@ -82,11 +188,14 @@ async def rate_limit_middleware(request: Request, call_next):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("QUAERYX starting up...")
-    # Start the Brand Sentinel CT log scanner background loop
-    task = asyncio.create_task(_ct_background_loop())
-    logger.info(f"Brand Sentinel: CT scanner scheduled every {_CT_INTERVAL_HOURS}h (first run in 90s)")
+    ct_task     = asyncio.create_task(_ct_background_loop())
+    feeds_task  = asyncio.create_task(_feeds_background_loop())
+    stream_task = asyncio.create_task(_certstream_listener())
+    logger.info("Brand Sentinel: CT scan (6h), feeds scan (6h), certstream (live) — all started")
     yield
-    task.cancel()
+    ct_task.cancel()
+    feeds_task.cancel()
+    stream_task.cancel()
     logger.info("QUAERYX shutting down...")
 
 app = FastAPI(
