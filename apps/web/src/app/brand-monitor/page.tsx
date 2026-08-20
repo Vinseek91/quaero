@@ -414,7 +414,7 @@ export default function BrandMonitorPage() {
               {[
                 { name: "OpenPhish", desc: "AI-detected phishing", color: "bg-red-50 border-red-200 text-red-700" },
                 { name: "URLhaus (abuse.ch)", desc: "Malware URLs", color: "bg-orange-50 border-orange-200 text-orange-700" },
-                { name: "PhishStats", desc: "Community scored", color: "bg-yellow-50 border-yellow-200 text-yellow-700" },
+                { name: "ThreatFox (abuse.ch)", desc: "Community scored", color: "bg-yellow-50 border-yellow-200 text-yellow-700" },
                 { name: "Certstream", desc: "Real-time certs", color: "bg-purple-50 border-purple-200 text-purple-700" },
               ].map((s) => (
                 <div key={s.name} className={`flex items-center gap-1.5 text-[10px] font-semibold border rounded-xl px-2.5 py-1.5 ${s.color}`}>
@@ -436,7 +436,7 @@ export default function BrandMonitorPage() {
                 </div>
                 {feedsLatest.feed_sizes && (
                   <div className="mt-1 text-gray-400">
-                    Feed sizes — OpenPhish: {feedsLatest.feed_sizes.openphish?.toLocaleString()} · URLhaus: {feedsLatest.feed_sizes.urlhaus?.toLocaleString()} · PhishStats: {feedsLatest.feed_sizes.phishstats?.toLocaleString()}
+                    Feed sizes — OpenPhish: {feedsLatest.feed_sizes.openphish?.toLocaleString()} · URLhaus: {feedsLatest.feed_sizes.urlhaus?.toLocaleString()} · ThreatFox (abuse.ch): {feedsLatest.feed_sizes.threatfox?.toLocaleString()}
                   </div>
                 )}
               </div>
@@ -510,7 +510,7 @@ export default function BrandMonitorPage() {
             {feedScanning && (
               <div className="text-center py-8 text-gray-500 text-sm">
                 <div className="text-3xl mb-2 animate-pulse">🔴</div>
-                <div className="font-semibold">Scanning OpenPhish · URLhaus · PhishStats...</div>
+                <div className="font-semibold">Scanning OpenPhish · URLhaus · ThreatFox (abuse.ch)...</div>
                 <div className="text-xs text-gray-400 mt-1">Checking {feedBrand} against millions of confirmed phishing URLs</div>
               </div>
             )}
@@ -526,7 +526,7 @@ export default function BrandMonitorPage() {
                       <div className="flex-1">
                         <div className="font-bold text-gray-900">{feedResult.brand}</div>
                         <div className="text-xs text-gray-500">
-                          Checked {feedResult.feed_sizes?.openphish?.toLocaleString()} OpenPhish + {feedResult.feed_sizes?.urlhaus?.toLocaleString()} URLhaus + {feedResult.feed_sizes?.phishstats?.toLocaleString()} PhishStats URLs
+                          Checked {feedResult.feed_sizes?.openphish?.toLocaleString()} OpenPhish + {feedResult.feed_sizes?.urlhaus?.toLocaleString()} URLhaus + {feedResult.feed_sizes?.threatfox?.toLocaleString()} ThreatFox (abuse.ch) URLs
                         </div>
                         <div className="text-xs text-gray-400">{feedResult.scanned_at}</div>
                       </div>
@@ -539,7 +539,7 @@ export default function BrandMonitorPage() {
                       <div className="text-center py-6 text-green-600">
                         <div className="text-3xl mb-2">✅</div>
                         <div className="font-semibold">No confirmed phishing URLs found</div>
-                        <div className="text-xs text-gray-400 mt-1">Not currently in OpenPhish, URLhaus, or PhishStats</div>
+                        <div className="text-xs text-gray-400 mt-1">Not currently in OpenPhish, URLhaus, or ThreatFox (abuse.ch)</div>
                       </div>
                     )}
                     {feedResult.threats?.map((t: any, i: number) => (

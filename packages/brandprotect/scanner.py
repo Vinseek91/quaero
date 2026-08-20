@@ -438,7 +438,7 @@ async def _get_openphish() -> list[str]:
     if _time.time() - cache["fetched_at"] < _FEED_TTL and cache["urls"]:
         return cache["urls"]
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
             r = await client.get("https://openphish.com/feed.txt")
             if r.status_code == 200:
                 urls = [u.strip() for u in r.text.splitlines() if u.strip().startswith("http")]
@@ -481,30 +481,37 @@ async def _get_urlhaus() -> list[str]:
     return cache["urls"]
 
 
-async def _get_phishstats() -> list[str]:
-    """Download PhishStats feed (phish_score.csv). Cached 6h."""
+async def _get_threatfox() -> list[str]:
+    """
+    Download ThreatFox feed (abuse.ch) — recent malware & phishing IOCs.
+    Same organisation as URLhaus. Free, no API key. Cached 6h.
+    """
     import httpx, time as _time
-    cache = _feed_cache["phishstats"]
+    cache = _feed_cache["phishstats"]  # reuse existing cache slot
     if _time.time() - cache["fetched_at"] < _FEED_TTL and cache["urls"]:
         return cache["urls"]
     try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            r = await client.get("https://phishstats.info/phish_score.csv",
-                                 headers={"User-Agent": "QUAERYX-BrandSentinel/1.0"})
+        async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
+            r = await client.get(
+                "https://threatfox.abuse.ch/export/json/recent/",
+                headers={"User-Agent": "QUAERYX-BrandSentinel/1.0"},
+            )
             if r.status_code == 200:
+                data = r.json()
                 urls = []
-                for line in r.text.splitlines()[1:]:  # skip header
-                    parts = line.split(",")
-                    if len(parts) >= 2:
-                        url = parts[1].strip().strip('"')
-                        if url.startswith("http"):
-                            urls.append(url)
+                for ioc in data.get("data", []):
+                    ioc_value = ioc.get("ioc_value", "")
+                    if ioc_value.startswith("http"):
+                        urls.append(ioc_value)
+                    # Also include URL-type IOCs stored without scheme
+                    elif ioc.get("ioc_type") == "url" and ioc_value:
+                        urls.append(f"https://{ioc_value}")
                 cache["urls"] = urls
                 cache["fetched_at"] = _time.time()
-                logger.info(f"PhishStats: loaded {len(urls)} phishing URLs")
+                logger.info(f"ThreatFox: loaded {len(urls)} malware/phishing IOCs")
                 return urls
     except Exception as e:
-        logger.warning(f"PhishStats fetch failed: {e}")
+        logger.warning(f"ThreatFox fetch failed: {e}")
     return cache["urls"]
 
 
@@ -525,7 +532,7 @@ async def feeds_scan_brand(brand_name: str) -> dict:
 
     # Download all three feeds in parallel
     openphish_urls, urlhaus_urls, phishstats_urls = await asyncio.gather(
-        _get_openphish(), _get_urlhaus(), _get_phishstats(),
+        _get_openphish(), _get_urlhaus(), _get_threatfox(),
         return_exceptions=True,
     )
     if isinstance(openphish_urls, Exception):  openphish_urls = []
@@ -590,7 +597,7 @@ async def feeds_scan_all_brands() -> dict:
     """Scan all 45+ brands against all three phishing feeds simultaneously."""
     # Download feeds once, then filter per brand
     openphish_urls, urlhaus_urls, phishstats_urls = await asyncio.gather(
-        _get_openphish(), _get_urlhaus(), _get_phishstats(),
+        _get_openphish(), _get_urlhaus(), _get_threatfox(),
         return_exceptions=True,
     )
     if isinstance(openphish_urls, Exception):  openphish_urls = []
