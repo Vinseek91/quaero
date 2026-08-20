@@ -618,11 +618,19 @@ async def feeds_scan_all_brands() -> dict:
             seen.add(url)
             scored = score_url(url)
             if scored["is_suspicious"]:
-                brand_threats.append({"url": url, "source": source, "risk_score": scored["risk"]})
+                brand_threats.append({
+                    "url": url,
+                    "source": source,
+                    "risk_score": scored["risk"],
+                    "reasons": scored["reasons"],
+                    "report_to": brand["security_email"],
+                })
 
         if brand_threats:
             all_threats.append({
                 "brand": brand["name"],
+                "official_domain": brand["domain"],
+                "security_email": brand["security_email"],
                 "threats_found": len(brand_threats),
                 "threats": sorted(brand_threats, key=lambda x: x["risk_score"], reverse=True),
             })

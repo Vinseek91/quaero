@@ -468,17 +468,61 @@ export default function BrandMonitorPage() {
               <div className="mb-6">
                 <div className="text-sm font-bold text-gray-900 mb-3">🚨 Confirmed threats by brand</div>
                 {feedsLatest.results.map((br: any, i: number) => (
-                  <div key={i} className="mb-4">
-                    <div className="text-xs font-bold text-red-700 mb-2">{br.brand} — {br.threats_found} confirmed phishing URLs</div>
-                    {br.threats?.slice(0, 3).map((t: any, j: number) => (
-                      <div key={j} className="border border-red-200 bg-red-50 rounded-xl p-3 mb-2 flex items-center justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-bold text-red-800 break-all">{t.url}</div>
-                          <div className="text-[10px] text-red-600 mt-0.5">Source: {t.source}</div>
-                        </div>
-                        <span className="shrink-0 text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-bold">{t.risk_score}/100</span>
+                  <div key={i} className="mb-5 border border-red-100 rounded-2xl overflow-hidden">
+                    {/* Brand header with bulk alert button */}
+                    <div className="flex items-center justify-between bg-red-600 text-white px-4 py-2.5 gap-3">
+                      <div>
+                        <span className="font-bold text-sm">{br.brand}</span>
+                        <span className="text-red-200 text-xs ml-2">· {br.threats_found} confirmed phishing URLs</span>
                       </div>
-                    ))}
+                      {br.security_email && (
+                        <a href={`mailto:${br.security_email}?subject=Phishing%20Alert%3A%20${br.threats_found}%20Fake%20Sites%20Detected&body=Dear%20${encodeURIComponent(br.brand)}%20Security%20Team%2C%0A%0AQUAERYX%20Brand%20Sentinel%20has%20detected%20${br.threats_found}%20confirmed%20phishing%20URLs%20impersonating%20${encodeURIComponent(br.brand)}%20in%20global%20threat%20intelligence%20feeds%20(URLhaus%2C%20OpenPhish%2C%20ThreatFox).%0A%0AURLs%20detected%3A%0A${br.threats?.slice(0,10).map((t: any) => t.url).join('%0A')}%0A%0APlease%20submit%20these%20to%20Google%20Safe%20Browsing%20(https%3A%2F%2Fsafebrowsing.google.com%2Fsafebrowsing%2Freport_phish%2F)%20and%20initiate%20takedown.%0A%0ADetected%20by%20QUAERYX%20Brand%20Sentinel%20-%20https%3A%2F%2Fquaeryx-search.vercel.app%2Fbrand-monitor`}
+                          className="shrink-0 text-[10px] bg-white/20 hover:bg-white/40 text-white font-bold px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap border border-white/30">
+                          📧 Alert {br.brand} Security Team
+                        </a>
+                      )}
+                    </div>
+
+                    {/* Individual threat cards */}
+                    <div className="bg-red-50 px-3 py-3 space-y-2">
+                      {br.threats?.slice(0, 3).map((t: any, j: number) => (
+                        <div key={j} className="bg-white border border-red-200 rounded-xl p-3">
+                          <div className="flex items-start gap-2 mb-2">
+                            <div className="text-xs font-bold text-red-800 break-all flex-1">{t.url}</div>
+                            <span className="shrink-0 text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-bold">{t.risk_score}/100</span>
+                          </div>
+                          <div className="text-[10px] text-gray-500 mb-2">
+                            Source: <span className="font-semibold text-gray-700">{t.source}</span>
+                            <span className="ml-2 text-green-600 font-semibold">✓ Confirmed</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <a href="https://safebrowsing.google.com/safebrowsing/report_phish/" target="_blank"
+                              className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-semibold hover:bg-blue-100 transition-colors">
+                              🔵 Google Safe Browsing
+                            </a>
+                            <a href="https://www.cert-in.org.in/" target="_blank"
+                              className="text-[10px] bg-orange-50 text-orange-700 border border-orange-200 px-2 py-1 rounded-lg font-semibold hover:bg-orange-100 transition-colors">
+                              🇮🇳 CERT-In
+                            </a>
+                            <a href="https://www.ic3.gov/" target="_blank"
+                              className="text-[10px] bg-gray-50 text-gray-700 border border-gray-200 px-2 py-1 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
+                              🌐 FBI IC3
+                            </a>
+                            {t.report_to && (
+                              <a href={`mailto:${t.report_to}?subject=Phishing%20Alert%3A%20${encodeURIComponent(t.url)}&body=Confirmed%20phishing%20URL%20found%20in%20${encodeURIComponent(t.source)}%3A%0A%0A${encodeURIComponent(t.url)}%0A%0ARisk%20Score%3A%20${t.risk_score}%2F100%0A%0ADetected%20by%20QUAERYX%20Brand%20Sentinel.%0APlease%20report%20to%20Google%20Safe%20Browsing%20and%20request%20takedown.`}
+                                className="text-[10px] bg-red-600 text-white px-2 py-1 rounded-lg font-semibold hover:bg-red-700 transition-colors">
+                                📧 Alert Brand Owner
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {br.threats?.length > 3 && (
+                        <div className="text-[10px] text-red-500 font-semibold text-center py-1">
+                          +{br.threats.length - 3} more threats — select brand in &quot;Scan specific brand&quot; below for full list
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
