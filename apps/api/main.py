@@ -73,60 +73,66 @@ async def _feeds_background_loop():
 
 async def _certstream_listener():
     """
-    Connect to certstream (wss://certstream.calidog.io) and watch every SSL cert
-    issued globally in real-time. When a domain contains a brand keyword AND scores
-    as suspicious, add it to stream_alerts immediately.
+    Connect to certstream (wss://certstream.calidog.io) for real-time cert monitoring.
+    Requires the 'websockets' package — silently disabled if not installed.
+    Never crashes the server regardless of what happens.
     """
-    import json as _json
-    import websockets
-    from packages.brandprotect.scanner import score_url, PROTECTED_BRANDS
+    try:
+        import websockets as _ws
+    except ImportError:
+        logger.info("Certstream: websockets package not installed — skipping real-time listener")
+        return  # graceful no-op
 
-    # Build keyword → brand_name lookup for fast matching
-    kw_map: dict[str, str] = {}
-    for brand in PROTECTED_BRANDS:
-        for kw in brand["keywords"]:
-            kw_map[kw] = brand["name"]
+    try:
+        import json as _json
+        from packages.brandprotect.scanner import score_url
+        from packages.brandprotect.brands import PROTECTED_BRANDS
 
-    uri = "wss://certstream.calidog.io/"
-    backoff = 5
+        kw_map: dict = {}
+        for brand in PROTECTED_BRANDS:
+            for kw in brand["keywords"]:
+                kw_map[kw] = brand["name"]
 
-    while True:
-        try:
-            logger.info("Certstream: connecting to live CT log stream...")
-            async with websockets.connect(uri, ping_interval=30, ping_timeout=10) as ws:
-                logger.info("Certstream: connected — watching live cert issuances")
-                backoff = 5  # reset on successful connect
-                async for raw in ws:
-                    try:
-                        msg = _json.loads(raw)
-                        if msg.get("message_type") != "certificate_update":
-                            continue
-                        leaf = msg.get("data", {}).get("leaf_cert", {})
-                        domains = leaf.get("all_domains", [])
-                        for domain in domains:
-                            domain = domain.lower().lstrip("*.")
-                            for kw, brand_name in kw_map.items():
-                                if kw in domain:
-                                    scored = score_url(domain)
-                                    if scored["is_suspicious"] and scored.get("brand") == brand_name:
-                                        alert = {
-                                            "domain": domain,
-                                            "url": f"https://{domain}",
-                                            "brand": brand_name,
-                                            "risk_score": scored["risk"],
-                                            "reasons": scored["reasons"],
-                                            "detected_at": time.strftime("%Y-%m-%d %H:%M UTC"),
-                                            "source": "Certstream (real-time)",
-                                        }
-                                        stream_alerts.appendleft(alert)
-                                        logger.warning(f"Certstream ALERT: {domain} → {brand_name} ({scored['risk']}/100)")
-                                    break  # matched one keyword, no need to check more
-                    except Exception:
-                        pass
-        except Exception as e:
-            logger.warning(f"Certstream disconnected: {e} — reconnecting in {backoff}s")
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 120)  # exponential backoff, max 2 min
+        uri = "wss://certstream.calidog.io/"
+        backoff = 5
+
+        while True:
+            try:
+                logger.info("Certstream: connecting...")
+                async with _ws.connect(uri, ping_interval=30, ping_timeout=10) as ws:
+                    logger.info("Certstream: connected — watching live cert issuances")
+                    backoff = 5
+                    async for raw in ws:
+                        try:
+                            msg = _json.loads(raw)
+                            if msg.get("message_type") != "certificate_update":
+                                continue
+                            leaf = msg.get("data", {}).get("leaf_cert", {})
+                            for domain in leaf.get("all_domains", []):
+                                domain = domain.lower().lstrip("*.")
+                                for kw, brand_name in kw_map.items():
+                                    if kw in domain:
+                                        scored = score_url(domain)
+                                        if scored["is_suspicious"] and scored.get("brand") == brand_name:
+                                            stream_alerts.appendleft({
+                                                "domain": domain,
+                                                "url": f"https://{domain}",
+                                                "brand": brand_name,
+                                                "risk_score": scored["risk"],
+                                                "reasons": scored["reasons"],
+                                                "detected_at": time.strftime("%Y-%m-%d %H:%M UTC"),
+                                                "source": "Certstream (real-time)",
+                                            })
+                                            logger.warning(f"Certstream: {domain} → {brand_name} ({scored['risk']}/100)")
+                                        break
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.warning(f"Certstream disconnected ({e}) — retry in {backoff}s")
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 120)
+    except Exception as e:
+        logger.error(f"Certstream listener fatal error: {e}")
 
 
 async def _ct_background_loop():
@@ -188,14 +194,21 @@ async def rate_limit_middleware(request: Request, call_next):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("QUAERYX starting up...")
-    ct_task     = asyncio.create_task(_ct_background_loop())
-    feeds_task  = asyncio.create_task(_feeds_background_loop())
-    stream_task = asyncio.create_task(_certstream_listener())
-    logger.info("Brand Sentinel: CT scan (6h), feeds scan (6h), certstream (live) — all started")
+    tasks = []
+    for name, coro in [
+        ("CT scanner",    _ct_background_loop()),
+        ("Feeds scanner", _feeds_background_loop()),
+        ("Certstream",    _certstream_listener()),
+    ]:
+        try:
+            t = asyncio.create_task(coro)
+            tasks.append(t)
+            logger.info(f"Brand Sentinel: {name} started")
+        except Exception as e:
+            logger.error(f"Brand Sentinel: failed to start {name}: {e}")
     yield
-    ct_task.cancel()
-    feeds_task.cancel()
-    stream_task.cancel()
+    for t in tasks:
+        t.cancel()
     logger.info("QUAERYX shutting down...")
 
 app = FastAPI(
